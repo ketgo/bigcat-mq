@@ -120,6 +120,8 @@ using ConstSpan = details::ring_buffer::MemoryBlockHandle<const T>;
 /**
  * @brief A lock-free and wait-free ring buffer supporting multiple consumers
  * and producers.
+ * 
+ * TODO: Release cursors for stale processes which have died abruptly.
  *
  * @tparam T The type of object stored in the buffer.
  */
@@ -153,6 +155,9 @@ class RingBuffer {
    * The method copies the data stored in the given memory location onto the
    * ring buffer.
    *
+   * TODO: Improve interface by passing a span object instead of the data
+   * pointer and size.
+   *
    * @param data Pointer to the data containing memory location.
    * @param size Size of the data.
    * @param max_attempt Maximum number of attempts to perform.
@@ -162,10 +167,12 @@ class RingBuffer {
                            size_t max_attempt = defaultMaxAttempt());
 
   /**
-   * @brief Consume from from ring buffer.
+   * @brief Consume from ring buffer.
    *
    * The method fills the passed span object such that it encapsulates the
    * stored data on the ring buffer for consumption.
+   *
+   * TODO: Improve interface by returning the passed span object.
    *
    * @param span Span to the data stored on the buffer.
    * @param max_attempt Maximum number of attempts to perform.

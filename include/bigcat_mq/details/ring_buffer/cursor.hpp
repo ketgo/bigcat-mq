@@ -32,11 +32,11 @@ namespace ring_buffer {
 /**
  * @brief Ring buffer atomic cursor.
  *
- * The cursor represensts a location to a character in a ring buffer. It
+ * The cursor represents a location to a character in a ring buffer. It
  * comprises of an offset from the starting index 0, and the number of cycles
  * completed when transversing the buffer. An atomic size_t type is used to
  * store values of a cursor such that the offset and cycle can be computed using
- * the following equaltions:
+ * the following equations:
  *
  * offset = cursor_value % buffer_size
  * cycle = cursor_value / buffer_size
@@ -53,7 +53,7 @@ using Cursor = std::atomic_size_t;
  * To perform any read/write operations the ring buffer must first acquire a
  * cursor from the pool using the `Allocate` method, and then must release it
  * once done using the `Release` method. Each allocated cursor contains a
- * positional index inside the ring bufer where the read/write operations
+ * positional index inside the ring buffer where the read/write operations
  * are to be performed.
  *
  */
@@ -67,7 +67,7 @@ class CursorPool {
   explicit CursorPool(const size_t pool_size);
 
   /**
-   * @brief Allocate a cursor from availble set of free cursors.
+   * @brief Allocate a cursor from available set of free cursors.
    *
    * The method attempts to allocate a free cursor by random selection. It
    * performs `max_attempt` number of attempts. If no cursor is found then a
@@ -171,7 +171,7 @@ bool CursorPool::WithinBounds(const size_t buffer_size,
 // ============================================================================
 
 /**
- * @brief The class `CursorGuard` is a convinient RAII way for releasing an
+ * @brief The class `CursorGuard` is a convenient RAII way for releasing an
  * allocated cursor back to a cursor pool.
  *
  * @note The class does not satisfy CopyConstructable and CopyAssignable
