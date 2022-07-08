@@ -36,12 +36,10 @@ class RingBufferTestFixture : public ::testing::Test {
 
 TEST_F(RingBufferTestFixture, TestPublishConsumeSingleThread) {
   std::string write_data = "testing";
-  std::vector<char> read_data(write_data.size());
-  bigcat::details::ConstSpan<char> span;
+  bigcat::details::ReadSpan<char> span;
 
-  ASSERT_EQ(buffer_.Publish(write_data.c_str(), write_data.size()),
+  ASSERT_EQ(buffer_.Publish(write_data),
             bigcat::details::RingBufferResult::SUCCESS);
   ASSERT_EQ(buffer_.Consume(span), bigcat::details::RingBufferResult::SUCCESS);
-  memcpy(read_data.data(), span.Data(), read_data.size());
-  ASSERT_EQ(write_data, std::string(read_data.begin(), read_data.end()));
+  ASSERT_EQ(write_data, std::string(span.Data(), span.Size()));
 }
