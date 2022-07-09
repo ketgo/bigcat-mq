@@ -96,12 +96,11 @@ class CursorPool {
    * pool can become free or their values changed while the check is being
    * performed.
    *
-   * @tparam BUFFER_SIZE Size of the ring buffer in bytes.
+   * @param buffer_size Size of the ring buffer in bytes.
    * @param cursor_value Value of the cursor.
    * @return `true` if within bound else `false`.
    */
-  template <size_t BUFFER_SIZE>
-  bool WithinBounds(size_t cursor_value) const;
+  bool WithinBounds(const size_t buffer_size, size_t cursor_value) const;
 
  private:
   /**
@@ -146,23 +145,23 @@ Cursor *CursorPool<POOL_SIZE>::Allocate(size_t max_attempt) {
 template <size_t POOL_SIZE>
 void CursorPool<POOL_SIZE>::Release(Cursor *cursor) {
   assert(cursor != nullptr);
-  const size_t idx = cursor - cursor_.data();
+  const size_t idx = cursor - cursor_;
   cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
 }
 
 template <size_t POOL_SIZE>
-template <size_t BUFFER_SIZE>
-bool CursorPool<POOL_SIZE>::WithinBounds(size_t cursor_value) const {
-  auto offset = cursor_value % BUFFER_SIZE;
-  auto cycle = cursor_value / BUFFER_SIZE;
+bool CursorPool<POOL_SIZE>::WithinBounds(const size_t buffer_size,
+                                         size_t cursor_value) const {
+  auto offset = cursor_value % buffer_size;
+  auto cycle = cursor_value / buffer_size;
   // TODO: Scope for improvement by reducing the number of cursors to perform
   // checks.
   for (size_t idx = 0; idx < POOL_SIZE; ++idx) {
     if (cursor_state_[idx].load(std::memory_order_seq_cst) ==
         CursorState::ALLOCATED) {
       auto _value = cursor_[idx].load(std::memory_order_seq_cst);
-      auto _offset = _value % BUFFER_SIZE;
-      auto _cycle = _value / BUFFER_SIZE;
+      auto _offset = _value % buffer_size;
+      auto _cycle = _value / buffer_size;
       if (_cycle == cycle && _offset <= offset) {
         return true;
       }

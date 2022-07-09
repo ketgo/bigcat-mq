@@ -22,5 +22,8 @@ cc_library(
     name = "bigcat_mq",
     hdrs = glob(["include/**"]),
     includes = ["include"],
-    linkopts = ["-lrt"],
+    linkopts = select({
+        "@platforms//os:linux": ["-lrt"],
+        "//conditions:default": [],
+    }),
 )

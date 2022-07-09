@@ -171,11 +171,11 @@ class Allocator {
       size_t max_attempt) const;
 
  private:
-  unsigned char data_[BUFFER_SIZE];          // data buffer
-  CursorPool<POOL_SIZE> write_pool_;         // write cursor pool
-  Cursor write_head_;                        // write head
-  mutable CursorPool<POOL_SIZE> read_pool_;  // read cursor pool
-  mutable Cursor read_head_;                 // read head
+  unsigned char data_[BUFFER_SIZE];              // data buffer
+  CursorPool<MAX_PRODUCERS> write_pool_;         // write cursor pool
+  Cursor write_head_;                            // write head
+  mutable CursorPool<MAX_CONSUMERS> read_pool_;  // read cursor pool
+  mutable Cursor read_head_;                     // read head
 };
 
 // -------------------------
@@ -194,7 +194,7 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
     const size_t size, size_t max_attempt) {
   // Get the size of memory block to allocate for writing
   auto block_size = sizeof(block_t) + size * sizeof(T);
-  assert(block_size < data_.size());
+  assert(block_size < BUFFER_SIZE);
 
   // Attempt to get a write cursor from the cursor pool
   auto* cursor = write_pool_.Allocate(max_attempt);
@@ -207,13 +207,13 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
     size_t end_idx = start_idx + block_size;
     // Allocate chunk only if the end_idx is behind all the allocated read
     // cursors
-    if (!read_pool_.WithinBounds<BUFFER_SIZE>(end_idx)) {
+    if (!read_pool_.WithinBounds(BUFFER_SIZE, end_idx)) {
       cursor->store(start_idx, std::memory_order_seq_cst);
       // Set write head to new value if its original value has not been already
       // changed by another writer.
       if (write_head_.compare_exchange_weak(start_idx, end_idx)) {
         auto* block =
-            reinterpret_cast<block_t*>(&data_[start_idx % data_.size()]);
+            reinterpret_cast<block_t*>(&data_[start_idx % BUFFER_SIZE]);
         block->size = size;
         return {block, cursor, &write_pool_};
       }
@@ -245,12 +245,12 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
   while (max_attempt) {
     size_t start_idx = read_head_.load(std::memory_order_seq_cst);
     auto* block = reinterpret_cast<const_block_t*>(
-        const_cast<unsigned char*>(&data_[start_idx % data_.size()]));
+        const_cast<unsigned char*>(&data_[start_idx % BUFFER_SIZE]));
     size_t end_idx = start_idx + block->size;
 
     // Allocate chunk only if the end_idx is behind all the allocated write
     // cursors
-    if (!write_pool_.WithinBounds<BUFFER_SIZE>(end_idx)) {
+    if (!write_pool_.WithinBounds(BUFFER_SIZE, end_idx)) {
       cursor->store(start_idx, std::memory_order_seq_cst);
       // Set read head to new value if its original value has not been already
       // changed by another reader.

@@ -28,7 +28,8 @@ TEST(RingBufferDetailsTestFixture, TestRand) {
 
 class RingBufferTestFixture : public ::testing::Test {
  protected:
-  bigcat::details::RingBuffer<char> buffer_ = {100, 5, 5};
+  using RingBuffer = bigcat::details::RingBuffer<char, 100, 5, 5>;
+  RingBuffer buffer_;
 
   void SetUp() override {}
   void TearDown() override {}
@@ -36,7 +37,7 @@ class RingBufferTestFixture : public ::testing::Test {
 
 TEST_F(RingBufferTestFixture, TestPublishConsumeSingleThread) {
   std::string write_data = "testing";
-  bigcat::details::ReadSpan<char> span;
+  RingBuffer::ReadSpan span;
 
   ASSERT_EQ(buffer_.Publish(write_data),
             bigcat::details::RingBufferResult::SUCCESS);

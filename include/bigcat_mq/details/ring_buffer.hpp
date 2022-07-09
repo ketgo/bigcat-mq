@@ -100,8 +100,6 @@
 namespace bigcat {
 namespace details {
 
-// ============================================================================
-
 /**
  * @brief Enumerated set of results returned by the RingBuffer.
  *
@@ -111,130 +109,6 @@ enum class RingBufferResult {
   ERROR_BUFFER_FULL = 1,   // Buffer full error
   ERROR_BUFFER_EMPTY = 2,  // Buffer empty error
 };
-
-// ============================================================================
-
-/**
- * @brief Span encapsulating data ready to be written into the ring buffer.
- *
- * @tparam T Type of object stored.
- */
-template <class T>
-class WriteSpan {
- public:
-  /**
-   * @brief Construct a new WriteSpan object.
-   *
-   */
-  WriteSpan() : size_(0), data_(nullptr) {}
-
-  /**
-   * @brief Construct a new WriteSpan object
-   *
-   * @param data Constant pointer to the data.
-   * @param size Size of the data.
-   */
-  WriteSpan(const T *data, const size_t size) : size_(size), data_(data) {}
-
-  /**
-   * @brief Construct a new WriteSpan object.
-   *
-   * @tparam N Size of array.
-   */
-  template <size_t N>
-  WriteSpan(T (&array)[N]) : size_(N), data_(array) {}
-
-  /**
-   * @brief Construct a new WriteSpan object
-   *
-   * @tparam N Size of array.
-   * @param array Constant reference to the array.
-   */
-  template <std::size_t N>
-  WriteSpan(const std::array<T, N> &array)
-      : size_(array.size()), data_(array.data()) {}
-
-  /**
-   * @brief Construct a new WriteSpan object.
-   *
-   * @param vector Constant reference to the vector.
-   */
-  WriteSpan(const std::vector<T> &vector)
-      : size_(vector.size()), data_(vector.data()) {}
-
-  /**
-   * @brief Construct a new WriteSpan object.
-   *
-   * @param string Constant reference to the string.
-   */
-  template <class U = T,
-            typename std::enable_if<std::is_same<U, char>::value>::type...>
-  WriteSpan(const std::string &string)
-      : size_(string.size()), data_(string.data()) {}
-
-  /**
-   * @brief Get the number of objects of type T stored in the span.
-   *
-   */
-  size_t Size() const;
-
-  /**
-   * @brief Get the pointer to the first T type object in the span.
-   *
-   */
-  const T *Data() const;
-
- private:
-  size_t size_;
-  const T *data_;
-};
-
-// -------------------------
-// WriteSpan Implementation
-// -------------------------
-
-template <class T>
-size_t WriteSpan<T>::Size() const {
-  return size_;
-}
-
-template <class T>
-const T *WriteSpan<T>::Data() const {
-  return data_;
-}
-
-// ============================================================================
-
-/**
- * @brief Span encapsulating data in the ring buffer ready to be read.
- *
- * TODO: Use composition to handle the need of cursor pool type template
- * parameter
- *
- * @tparam T Type of object stored.
- */
-template <class T>
-class ReadSpan {
- public:
-  template <class CursorPool>
-
-  /**
-   * @brief Get the number of objects of type T stored in the span.
-   *
-   */
-  size_t Size() const;
-
-  /**
-   * @brief Get the pointer to the first T type object in the span.
-   *
-   */
-  const T *Data() const;
-
- private:
-  details::ring_buffer::MemoryBlockHandle<const T>;
-};
-
-// ============================================================================
 
 /**
  * @brief A lock-free and wait-free ring buffer supporting multiple consumers
@@ -256,6 +130,93 @@ class RingBuffer {
 
  public:
   /**
+   * @brief Default maximum number of attempts made when publishing or consuming
+   * data from the ring buffer.
+   *
+   */
+  constexpr static size_t defaultMaxAttempt() { return 32; }
+
+  /**
+   * @brief Span encapsulating data in the ring buffer ready to be read.
+   *
+   */
+  using ReadSpan = details::ring_buffer::MemoryBlockHandle<
+      const T, details::ring_buffer::CursorPool<MAX_CONSUMERS>>;
+
+  /**
+   * @brief Span encapsulating data ready to be written into the ring buffer.
+   *
+   */
+  class WriteSpan {
+   public:
+    /**
+     * @brief Construct a new WriteSpan object.
+     *
+     */
+    WriteSpan() : size_(0), data_(nullptr) {}
+
+    /**
+     * @brief Construct a new WriteSpan object
+     *
+     * @param data Constant pointer to the data.
+     * @param size Size of the data.
+     */
+    WriteSpan(const T *data, const size_t size) : size_(size), data_(data) {}
+
+    /**
+     * @brief Construct a new WriteSpan object.
+     *
+     * @tparam N Size of array.
+     */
+    template <size_t N>
+    WriteSpan(T (&array)[N]) : size_(N), data_(array) {}
+
+    /**
+     * @brief Construct a new WriteSpan object
+     *
+     * @tparam N Size of array.
+     * @param array Constant reference to the array.
+     */
+    template <std::size_t N>
+    WriteSpan(const std::array<T, N> &array)
+        : size_(array.size()), data_(array.data()) {}
+
+    /**
+     * @brief Construct a new WriteSpan object.
+     *
+     * @param vector Constant reference to the vector.
+     */
+    WriteSpan(const std::vector<T> &vector)
+        : size_(vector.size()), data_(vector.data()) {}
+
+    /**
+     * @brief Construct a new WriteSpan object.
+     *
+     * @param string Constant reference to the string.
+     */
+    template <class U = T,
+              typename std::enable_if<std::is_same<U, char>::value>::type...>
+    WriteSpan(const std::string &string)
+        : size_(string.size()), data_(string.data()) {}
+
+    /**
+     * @brief Get the number of objects of type T stored in the span.
+     *
+     */
+    size_t Size() const { return size_; }
+
+    /**
+     * @brief Get the pointer to the first T type object in the span.
+     *
+     */
+    const T *Data() const { return data_; }
+
+   private:
+    size_t size_;
+    const T *data_;
+  };
+
+  /**
    * @brief Publish data to ring buffer.
    *
    * The method copies the data stored in the given memory location onto the
@@ -265,7 +226,7 @@ class RingBuffer {
    * @param max_attempt Maximum number of attempts to perform.
    * @returns Result of the operation.
    */
-  RingBufferResult Publish(const WriteSpan<T> &span,
+  RingBufferResult Publish(const WriteSpan &span,
                            size_t max_attempt = defaultMaxAttempt());
 
   /**
@@ -278,7 +239,7 @@ class RingBuffer {
    * @param max_attempt Maximum number of attempts to perform.
    * @returns Result of the operation.
    */
-  RingBufferResult Consume(ReadSpan<T> &span,
+  RingBufferResult Consume(ReadSpan &span,
                            size_t max_attempt = defaultMaxAttempt()) const;
 
  private:
@@ -293,7 +254,7 @@ class RingBuffer {
 template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
           size_t MAX_CONSUMERS>
 RingBufferResult RingBuffer<T, BUFFER_SIZE, MAX_PRODUCERS,
-                            MAX_CONSUMERS>::Publish(const WriteSpan<T> &span,
+                            MAX_CONSUMERS>::Publish(const WriteSpan &span,
                                                     size_t max_attempt) {
   // Attempt writing of data
   while (max_attempt) {
@@ -313,7 +274,7 @@ RingBufferResult RingBuffer<T, BUFFER_SIZE, MAX_PRODUCERS,
 template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
           size_t MAX_CONSUMERS>
 RingBufferResult RingBuffer<T, BUFFER_SIZE, MAX_PRODUCERS,
-                            MAX_CONSUMERS>::Consume(ReadSpan<T> &span,
+                            MAX_CONSUMERS>::Consume(ReadSpan &span,
                                                     size_t max_attempt) const {
   // Attempt reading of data
   while (max_attempt) {
@@ -328,8 +289,6 @@ RingBufferResult RingBuffer<T, BUFFER_SIZE, MAX_PRODUCERS,
   }
   return RingBufferResult::ERROR_BUFFER_EMPTY;
 }
-
-// ============================================================================
 
 }  // namespace details
 }  // namespace bigcat
