@@ -91,8 +91,9 @@
 #define BIGCAT_MQ__DETAILS__RING_BUFFER_HPP
 
 #include <array>
-#include <cstring>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 #include <bigcat_mq/details/ring_buffer/allocator.hpp>
 
@@ -207,10 +208,31 @@ const T *WriteSpan<T>::Data() const {
 /**
  * @brief Span encapsulating data in the ring buffer ready to be read.
  *
+ * TODO: Use composition to handle the need of cursor pool type template
+ * parameter
+ *
  * @tparam T Type of object stored.
  */
 template <class T>
-using ReadSpan = details::ring_buffer::MemoryBlockHandle<const T>;
+class ReadSpan {
+ public:
+  template <class CursorPool>
+
+  /**
+   * @brief Get the number of objects of type T stored in the span.
+   *
+   */
+  size_t Size() const;
+
+  /**
+   * @brief Get the pointer to the first T type object in the span.
+   *
+   */
+  const T *Data() const;
+
+ private:
+  details::ring_buffer::MemoryBlockHandle<const T>;
+};
 
 // ============================================================================
 
@@ -220,32 +242,19 @@ using ReadSpan = details::ring_buffer::MemoryBlockHandle<const T>;
  *
  * TODO: Release cursors for stale processes which have died abruptly.
  *
- * @tparam T The type of object stored in the buffer.
+ * @tparam T The type of object stored in ring buffer.
+ * @tparam BUFFER_SIZE The size of memory buffer in bytes.
+ * @tparam MAX_PRODUCERS The maximum number of producers.
+ * @tparam MAX_CONSUMERS The maximum number of consumers.
  */
-template <class T>
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
 class RingBuffer {
   // Ensures at compile time the parameter T has trivial memory layout.
   static_assert(std::is_trivial<T>::value,
                 "The data type used does not have a trivial memory layout.");
 
  public:
-  /**
-   * @brief Default maximum number of attempts made when publishing or consuming
-   * data from the ring buffer.
-   *
-   */
-  constexpr static size_t defaultMaxAttempt() { return 32; }
-
-  /**
-   * @brief Construct a new Ring Buffer object.
-   *
-   * @param buffer_size The size of ring buffer.
-   * @param max_producers The maximum number of producers.
-   * @param max_consumers The maximum number of consumers.
-   */
-  RingBuffer(const size_t buffer_size, const size_t max_producers,
-             const size_t max_consumers);
-
   /**
    * @brief Publish data to ring buffer.
    *
@@ -273,21 +282,19 @@ class RingBuffer {
                            size_t max_attempt = defaultMaxAttempt()) const;
 
  private:
-  details::ring_buffer::Allocator<T> allocator_;
+  details::ring_buffer::Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>
+      allocator_;
 };
 
 // -------------------------
 // RingBuffer Implementation
 // -------------------------
 
-template <class T>
-RingBuffer<T>::RingBuffer(const size_t buffer_size, const size_t max_producers,
-                          const size_t max_consumers)
-    : allocator_(buffer_size, max_producers, max_consumers) {}
-
-template <class T>
-RingBufferResult RingBuffer<T>::Publish(const WriteSpan<T> &span,
-                                        size_t max_attempt) {
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
+RingBufferResult RingBuffer<T, BUFFER_SIZE, MAX_PRODUCERS,
+                            MAX_CONSUMERS>::Publish(const WriteSpan<T> &span,
+                                                    size_t max_attempt) {
   // Attempt writing of data
   while (max_attempt) {
     // Allocate a write block on the buffer
@@ -303,9 +310,11 @@ RingBufferResult RingBuffer<T>::Publish(const WriteSpan<T> &span,
   return RingBufferResult::ERROR_BUFFER_FULL;
 }
 
-template <class T>
-RingBufferResult RingBuffer<T>::Consume(ReadSpan<T> &span,
-                                        size_t max_attempt) const {
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
+RingBufferResult RingBuffer<T, BUFFER_SIZE, MAX_PRODUCERS,
+                            MAX_CONSUMERS>::Consume(ReadSpan<T> &span,
+                                                    size_t max_attempt) const {
   // Attempt reading of data
   while (max_attempt) {
     // Allocate a read block on the buffer

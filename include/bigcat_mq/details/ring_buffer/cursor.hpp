@@ -18,7 +18,6 @@
 #define BIGCAT_MQ__DETAILS__RING_BUFFER__CURSOR_HPP
 
 #include <atomic>
-#include <vector>
 #include <cassert>
 
 #include <bigcat_mq/details/ring_buffer/random.hpp>
@@ -56,15 +55,16 @@ using Cursor = std::atomic_size_t;
  * positional index inside the ring buffer where the read/write operations
  * are to be performed.
  *
+ * @tparam POOL_SIZE Number of cursors in the pool.
  */
+template <size_t POOL_SIZE>
 class CursorPool {
  public:
   /**
    * @brief Construct a new CursorPool object.
    *
-   * @param pool_size Number of cursors in the pool.
    */
-  explicit CursorPool(const size_t pool_size);
+  CursorPool();
 
   /**
    * @brief Allocate a cursor from available set of free cursors.
@@ -96,11 +96,12 @@ class CursorPool {
    * pool can become free or their values changed while the check is being
    * performed.
    *
-   * @param buffer_size Size of the ring buffer in bytes.
+   * @tparam BUFFER_SIZE Size of the ring buffer in bytes.
    * @param cursor_value Value of the cursor.
    * @return `true` if within bound else `false`.
    */
-  bool WithinBounds(const size_t buffer_size, size_t cursor_value) const;
+  template <size_t BUFFER_SIZE>
+  bool WithinBounds(size_t cursor_value) const;
 
  private:
   /**
@@ -112,26 +113,26 @@ class CursorPool {
     ALLOCATED,  // Cursor in use.
   };
 
-  const size_t pool_size_;
-  std::vector<Cursor> cursor_;
-  std::vector<std::atomic<CursorState>> cursor_state_;
+  Cursor cursor_[POOL_SIZE];
+  std::atomic<CursorState> cursor_state_[POOL_SIZE];
 };
 
 // -------------------------
 // CursorPool Implementation
 // -------------------------
 
-CursorPool::CursorPool(const size_t pool_size)
-    : pool_size_(pool_size), cursor_(pool_size_), cursor_state_(pool_size_) {
-  for (size_t i = 0; i < pool_size_; ++i) {
+template <size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorPool() {
+  for (size_t i = 0; i < POOL_SIZE; ++i) {
     cursor_[i].store(0, std::memory_order_seq_cst);
     cursor_state_[i].store(CursorState::FREE, std::memory_order_seq_cst);
   }
 }
 
-Cursor *CursorPool::Allocate(size_t max_attempt) {
+template <size_t POOL_SIZE>
+Cursor *CursorPool<POOL_SIZE>::Allocate(size_t max_attempt) {
   while (max_attempt) {
-    const size_t idx = rand() % pool_size_;
+    const size_t idx = rand() % POOL_SIZE;
     auto expected = CursorState::FREE;
     if (cursor_state_[idx].compare_exchange_strong(expected,
                                                    CursorState::ALLOCATED)) {
@@ -142,24 +143,26 @@ Cursor *CursorPool::Allocate(size_t max_attempt) {
   return nullptr;
 }
 
-void CursorPool::Release(Cursor *cursor) {
+template <size_t POOL_SIZE>
+void CursorPool<POOL_SIZE>::Release(Cursor *cursor) {
   assert(cursor != nullptr);
   const size_t idx = cursor - cursor_.data();
   cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
 }
 
-bool CursorPool::WithinBounds(const size_t buffer_size,
-                              size_t cursor_value) const {
-  auto offset = cursor_value % buffer_size;
-  auto cycle = cursor_value / buffer_size;
+template <size_t POOL_SIZE>
+template <size_t BUFFER_SIZE>
+bool CursorPool<POOL_SIZE>::WithinBounds(size_t cursor_value) const {
+  auto offset = cursor_value % BUFFER_SIZE;
+  auto cycle = cursor_value / BUFFER_SIZE;
   // TODO: Scope for improvement by reducing the number of cursors to perform
   // checks.
-  for (size_t idx = 0; idx < pool_size_; ++idx) {
+  for (size_t idx = 0; idx < POOL_SIZE; ++idx) {
     if (cursor_state_[idx].load(std::memory_order_seq_cst) ==
         CursorState::ALLOCATED) {
       auto _value = cursor_[idx].load(std::memory_order_seq_cst);
-      auto _offset = _value % buffer_size;
-      auto _cycle = _value / buffer_size;
+      auto _offset = _value % BUFFER_SIZE;
+      auto _cycle = _value / BUFFER_SIZE;
       if (_cycle == cycle && _offset <= offset) {
         return true;
       }
@@ -178,7 +181,9 @@ bool CursorPool::WithinBounds(const size_t buffer_size,
  * concepts. However, it does satisfy MoveConstructable and MoveAssignable
  * concepts.
  *
+ * @tparam CursorPool The type of cursor pool.
  */
+template <class CursorPool>
 class CursorGuard {
  public:
   CursorGuard(Cursor *cursor = nullptr, CursorPool *pool = nullptr);
@@ -197,15 +202,19 @@ class CursorGuard {
 // CursorGuard Implementation
 // ---------------------------
 
-CursorGuard::CursorGuard(Cursor *cursor, CursorPool *pool)
+template <class CursorPool>
+CursorGuard<CursorPool>::CursorGuard(Cursor *cursor, CursorPool *pool)
     : cursor_(cursor), pool_(pool) {}
 
-CursorGuard::CursorGuard(CursorGuard &&other)
+template <class CursorPool>
+CursorGuard<CursorPool>::CursorGuard(CursorGuard &&other)
     : cursor_(other.cursor_), pool_(other.pool_) {
   other.pool_ = nullptr;
 }
 
-CursorGuard &CursorGuard::operator=(CursorGuard &&other) {
+template <class CursorPool>
+CursorGuard<CursorPool> &CursorGuard<CursorPool>::operator=(
+    CursorGuard &&other) {
   if (this != &other) {
     cursor_ = other.cursor_;
     pool_ = other.pool_;
@@ -215,7 +224,8 @@ CursorGuard &CursorGuard::operator=(CursorGuard &&other) {
   return *this;
 }
 
-CursorGuard::~CursorGuard() {
+template <class CursorPool>
+CursorGuard<CursorPool>::~CursorGuard() {
   if (pool_) {
     pool_->Release(cursor_);
   }

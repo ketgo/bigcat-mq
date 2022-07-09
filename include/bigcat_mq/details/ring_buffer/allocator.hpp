@@ -50,8 +50,9 @@ struct __attribute__((packed)) MemoryBlock {
  * reading or writing.
  *
  * @param T Type of objects stored in the memory block.
+ * @tparam CursorPool The type of cursor pool.
  */
-template <class T>
+template <class T, class CursorPool>
 class MemoryBlockHandle {
  public:
   /**
@@ -93,36 +94,37 @@ class MemoryBlockHandle {
 
  private:
   MemoryBlock<T>* block_;
-  CursorGuard guard_;
+  CursorGuard<CursorPool> guard_;
 };
 
 // --------------------------------
 // MemoryBlockHandle Implementation
 // --------------------------------
 
-template <class T>
-MemoryBlockHandle<T>::MemoryBlockHandle(MemoryBlock<T>* block, Cursor* cursor,
-                                        CursorPool* pool)
+template <class T, class CursorPool>
+MemoryBlockHandle<T, CursorPool>::MemoryBlockHandle(MemoryBlock<T>* block,
+                                                    Cursor* cursor,
+                                                    CursorPool* pool)
     : block_(block), guard_(cursor, pool) {}
 
-template <class T>
-size_t MemoryBlockHandle<T>::Size() const {
+template <class T, class CursorPool>
+size_t MemoryBlockHandle<T, CursorPool>::Size() const {
   return block_->size;
 }
 
-template <class T>
-T* MemoryBlockHandle<T>::Data() const {
+template <class T, class CursorPool>
+T* MemoryBlockHandle<T, CursorPool>::Data() const {
   return block_->data;
 }
 
-template <class T>
-T& MemoryBlockHandle<T>::operator[](size_t n) const {
+template <class T, class CursorPool>
+T& MemoryBlockHandle<T, CursorPool>::operator[](size_t n) const {
   assert(n < block_->size);
   return block_->data[n];
 }
 
-template <class T>
-MemoryBlockHandle<T>::operator bool() const {
+template <class T, class CursorPool>
+MemoryBlockHandle<T, CursorPool>::operator bool() const {
   return block_ != nullptr;
 }
 
@@ -132,8 +134,12 @@ MemoryBlockHandle<T>::operator bool() const {
  * @brief Allocator to allocate read and write memory blocks in the ring buffer.
  *
  * @tparam T The type of object stored in ring buffer.
+ * @tparam BUFFER_SIZE The size of memory buffer in bytes.
+ * @tparam MAX_PRODUCERS The maximum number of producers.
+ * @tparam MAX_CONSUMERS The maximum number of consumers.
  */
-template <class T>
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
 class Allocator {
   using block_t = MemoryBlock<T>;
   using const_block_t = MemoryBlock<const T>;
@@ -142,12 +148,8 @@ class Allocator {
   /**
    * @brief Construct a new Allocator object.
    *
-   * @param buffer_size Size of the ring buffer in bytes.
-   * @param max_producers Maximum number of concurrent producers.
-   * @param max_consumers Maximum number of concurrent consumers.
    */
-  Allocator(const size_t buffer_size, const size_t max_producers,
-            const size_t max_consumers);
+  Allocator();
 
   /**
    * @brief Allocate memory in the ring buffer for writing.
@@ -156,7 +158,8 @@ class Allocator {
    * @param max_attempt The maximum number of attempts.
    * @returns Pointer to the memory block.
    */
-  MemoryBlockHandle<T> Allocate(const size_t size, size_t max_attempt);
+  MemoryBlockHandle<T, CursorPool<MAX_PRODUCERS>> Allocate(const size_t size,
+                                                           size_t max_attempt);
 
   /**
    * @brief Allocate memory in the ring buffer for reading.
@@ -164,32 +167,31 @@ class Allocator {
    * @param max_attempt The maximum number of attempts.
    * @returns Pointer to the memory block.
    */
-  MemoryBlockHandle<const T> Allocate(size_t max_attempt) const;
+  MemoryBlockHandle<const T, CursorPool<MAX_CONSUMERS>> Allocate(
+      size_t max_attempt) const;
 
  private:
-  std::vector<unsigned char> data_;  // data buffer
-  CursorPool write_pool_;            // write cursor pool
-  Cursor write_head_;                // write head
-  mutable CursorPool read_pool_;     // read cursor pool
-  mutable Cursor read_head_;         // read head
+  unsigned char data_[BUFFER_SIZE];          // data buffer
+  CursorPool<POOL_SIZE> write_pool_;         // write cursor pool
+  Cursor write_head_;                        // write head
+  mutable CursorPool<POOL_SIZE> read_pool_;  // read cursor pool
+  mutable Cursor read_head_;                 // read head
 };
 
 // -------------------------
 // Allocator Implementation
 // -------------------------
 
-template <class T>
-Allocator<T>::Allocator(const size_t buffer_size, const size_t max_producers,
-                        const size_t max_consumers)
-    : data_(buffer_size),
-      write_pool_(max_producers),
-      write_head_(0),
-      read_pool_(max_consumers),
-      read_head_(0) {}
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
+Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocator()
+    : write_head_(0), read_head_(0) {}
 
-template <class T>
-MemoryBlockHandle<T> Allocator<T>::Allocate(const size_t size,
-                                            size_t max_attempt) {
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
+MemoryBlockHandle<T, CursorPool<MAX_PRODUCERS>>
+Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
+    const size_t size, size_t max_attempt) {
   // Get the size of memory block to allocate for writing
   auto block_size = sizeof(block_t) + size * sizeof(T);
   assert(block_size < data_.size());
@@ -205,7 +207,7 @@ MemoryBlockHandle<T> Allocator<T>::Allocate(const size_t size,
     size_t end_idx = start_idx + block_size;
     // Allocate chunk only if the end_idx is behind all the allocated read
     // cursors
-    if (!read_pool_.WithinBounds(data_.size(), end_idx)) {
+    if (!read_pool_.WithinBounds<BUFFER_SIZE>(end_idx)) {
       cursor->store(start_idx, std::memory_order_seq_cst);
       // Set write head to new value if its original value has not been already
       // changed by another writer.
@@ -229,8 +231,11 @@ MemoryBlockHandle<T> Allocator<T>::Allocate(const size_t size,
   return {};
 }
 
-template <class T>
-MemoryBlockHandle<const T> Allocator<T>::Allocate(size_t max_attempt) const {
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
+MemoryBlockHandle<const T, CursorPool<MAX_CONSUMERS>>
+Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
+    size_t max_attempt) const {
   // Attempt to get a read cursor from the cursor pool
   auto* cursor = read_pool_.Allocate(max_attempt);
   if (!cursor) {
@@ -245,7 +250,7 @@ MemoryBlockHandle<const T> Allocator<T>::Allocate(size_t max_attempt) const {
 
     // Allocate chunk only if the end_idx is behind all the allocated write
     // cursors
-    if (!write_pool_.WithinBounds(data_.size(), end_idx)) {
+    if (!write_pool_.WithinBounds<BUFFER_SIZE>(end_idx)) {
       cursor->store(start_idx, std::memory_order_seq_cst);
       // Set read head to new value if its original value has not been already
       // changed by another reader.
