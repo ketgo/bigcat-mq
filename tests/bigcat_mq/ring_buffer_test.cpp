@@ -77,7 +77,7 @@ void Print(const U* start, const size_t size, const char sep = ',',
 }
 
 TEST_F(RingBufferTestFixture, TestPublishConsumeSingleThread) {
-  constexpr auto kMessageCount = 5;
+  constexpr auto kMessageCount = 2;
 
   std::unordered_set<std::string> write_data;
   for (size_t i = 0; i < kMessageCount; ++i) {
@@ -86,6 +86,8 @@ TEST_F(RingBufferTestFixture, TestPublishConsumeSingleThread) {
               bigcat::details::RingBufferResult::SUCCESS);
     write_data.insert(data);
   }
+
+  Print<unsigned char>(buffer_.Data(), kBufferSize);
 
   for (size_t i = 0; i < kMessageCount; ++i) {
     RingBuffer::ReadSpan span;

@@ -35,7 +35,7 @@ namespace ring_buffer {
  *
  * The cursor represents a location to a character in a ring buffer. It
  * comprises of an offset from the starting index 0, and the number of cycles
- * completed when transversing the buffer. An atomic size_t type is used to
+ * completed when traversing the buffer. An atomic size_t type is used to
  * store values of a cursor such that the offset and cycle can be computed using
  * the following equations:
  *
