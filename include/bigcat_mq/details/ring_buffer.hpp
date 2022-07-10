@@ -242,6 +242,14 @@ class RingBuffer {
   RingBufferResult Consume(ReadSpan &span,
                            size_t max_attempt = defaultMaxAttempt()) const;
 
+#ifndef NDEBUG
+  /**
+   * @brief Get the ring buffer data.
+   *
+   */
+  const unsigned char *Data() const { return allocator_.Data(); }
+#endif
+
  private:
   details::ring_buffer::Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>
       allocator_;

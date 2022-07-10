@@ -1,11 +1,11 @@
 # Copyright 2022 Ketan Goyal
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,10 +15,14 @@
 cc_test(
     name = "ring_buffer_test",
     srcs = [
-        "ring_buffer_test.cpp"
+        "ring_buffer_test.cpp",
     ],
+    args = ["--gtest_repeat=10"],
     deps = [
         "//:bigcat_mq",
+        "//utils:chrono",
+        "//utils:debug",
+        "//utils:threads",
         "@gtest//:gtest_main",
     ],
 )

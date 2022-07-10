@@ -22,6 +22,8 @@
 
 #include <bigcat_mq/details/ring_buffer/random.hpp>
 
+#include "utils/debug.hpp"
+
 namespace bigcat {
 namespace details {
 namespace ring_buffer {
@@ -154,6 +156,9 @@ bool CursorPool<POOL_SIZE>::WithinBounds(const size_t buffer_size,
                                          size_t cursor_value) const {
   auto offset = cursor_value % buffer_size;
   auto cycle = cursor_value / buffer_size;
+
+  std::string message = "WithinBounds: [" + std::to_string(offset) + ", " +
+                        std::to_string(cycle) + "] E {";
   // TODO: Scope for improvement by reducing the number of cursors to perform
   // checks.
   for (size_t idx = 0; idx < POOL_SIZE; ++idx) {
@@ -162,11 +167,19 @@ bool CursorPool<POOL_SIZE>::WithinBounds(const size_t buffer_size,
       auto _value = cursor_[idx].load(std::memory_order_seq_cst);
       auto _offset = _value % buffer_size;
       auto _cycle = _value / buffer_size;
+      message +=
+          "[" + std::to_string(_offset) + ", " + std::to_string(_cycle) + "]";
       if (_cycle == cycle && _offset <= offset) {
+        message += "} --> True";
+        DPRINT(message);
         return true;
       }
     }
   }
+
+  message += "} --> False";
+  DPRINT(message);
+
   return false;
 }
 

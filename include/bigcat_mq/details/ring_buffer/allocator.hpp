@@ -22,6 +22,8 @@
 
 #include <bigcat_mq/details/ring_buffer/cursor.hpp>
 
+#include "utils/debug.hpp"
+
 namespace bigcat {
 namespace details {
 namespace ring_buffer {
@@ -170,6 +172,14 @@ class Allocator {
   MemoryBlockHandle<const T, CursorPool<MAX_CONSUMERS>> Allocate(
       size_t max_attempt) const;
 
+#ifndef NDEBUG
+  /**
+   * @brief Get the ring buffer data.
+   *
+   */
+  const unsigned char* Data() const { return data_; }
+#endif
+
  private:
   unsigned char data_[BUFFER_SIZE];              // data buffer
   CursorPool<MAX_PRODUCERS> write_pool_;         // write cursor pool
@@ -255,6 +265,7 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
       // Set read head to new value if its original value has not been already
       // changed by another reader.
       if (read_head_.compare_exchange_weak(start_idx, end_idx)) {
+        DPRINT("ALLOCATE: " + std::to_string(block->size));
         return {block, cursor, &read_pool_};
       }
       // Another reader allocated memory before us so try again until success or

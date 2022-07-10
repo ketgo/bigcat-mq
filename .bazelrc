@@ -47,3 +47,6 @@ build:msan --copt -O0
 build:msan --copt -fno-omit-frame-pointer
 build:msan --linkopt -fsanitize=memory
 build:msan --cc_output_directory_tag=msan
+
+# Dont cache test results
+test --cache_test_results=no
