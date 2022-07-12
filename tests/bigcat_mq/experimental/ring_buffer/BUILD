@@ -22,3 +22,18 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "cursor_test",
+    srcs = [
+        "cursor_test.cpp",
+    ],
+    args = ["--gtest_repeat=10"],
+    deps = [
+        "//:bigcat_mq",
+        "//utils:chrono",
+        "//utils:debug",
+        "//utils:threads",
+        "@gtest//:gtest_main",
+    ],
+)

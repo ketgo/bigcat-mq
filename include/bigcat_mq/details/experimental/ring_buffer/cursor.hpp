@@ -18,26 +18,323 @@
 #define BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__CURSOR_HPP
 
 #include <atomic>
+#include <cassert>
+
+#include <bigcat_mq/details/experimental/ring_buffer/random.hpp>
 
 namespace bigcat {
 namespace details {
 namespace experimental {
 namespace ring_buffer {
 
+// ============================================================================
+
 /**
- * @brief Ring buffer atomic cursor.
+ * @brief Ring buffer cursor.
  *
- * The cursor represents a location to a character in a ring buffer. It
- * comprises of an offset from the starting index 0, and the number of cycles
- * completed when traversing the buffer. An atomic size_t type is used to
- * store values of a cursor such that the offset and cycle can be computed using
- * the following equations:
+ * The cursor represents a location to an object inside the ring buffer. A 64
+ * bit data structure is used to store the following values:
  *
- * offset = cursor_value % buffer_size
- * cycle = cursor_value / buffer_size
+ *  a. [Bit 0]: Overflow sign of the cursor. The overflow sign is used to check
+ *              for the overflow phase. Upon overflow the sign is flipped.
+ *  b. [Bits 1-63]: Location value of the cursor used to get the index of an
+ *                  object in the ring buffer.
+ *
+ * @note The cursor is restricted to 64 bits in order to make the atomic type
+ * `std::atomic<Cursor>` lock free.
  *
  */
-using Cursor = std::atomic_size_t;
+class Cursor {
+ public:
+  /**
+   * @brief Construct a new Cursor object.
+   *
+   */
+  Cursor() = default;
+
+  /**
+   * @brief Construct a new Cursor object.
+   *
+   * @param overflow Overflow sign.
+   * @param location Cursor location.
+   */
+  Cursor(const bool overflow, const std::size_t location);
+
+  /**
+   * @brief Get the overflow sign of the cursor.
+   *
+   * @returns Boolean value representing the overflow sign of the cursor.
+   */
+  bool Overflow() const;
+
+  /**
+   * @brief Flip the overflow sign of the cursor.
+   *
+   */
+  void FlipOverflow();
+
+  /**
+   * @brief Get the location value stored in the cursor.
+   *
+   * @returns The location value.
+   */
+  uint64_t Location() const;
+
+  /**
+   * @brief Set the location value stored in the cursor.
+   *
+   * @param value The location value.
+   */
+  void SetLocation(const uint64_t value);
+
+ private:
+  bool overflow_ : 1;
+  uint64_t location_ : 63;
+};
+
+// ---------------------------------------
+// Cursor Implementation
+// ---------------------------------------
+
+Cursor::Cursor(const bool overflow, const std::size_t location)
+    : overflow_(overflow), location_(location) {}
+
+bool Cursor::Overflow() const { return overflow_; }
+
+void Cursor::FlipOverflow() { overflow_ = !overflow_; }
+
+uint64_t Cursor::Location() const { return location_; }
+
+void Cursor::SetLocation(const uint64_t value) { location_ = value; }
+
+// ============================================================================
+
+/**
+ * @brief A lock-free and wait-free pool of cursors used by the ring buffer for
+ * read/write operations.
+ *
+ * @tparam POOL_SIZE Number of cursors in the pool.
+ */
+template <std::size_t POOL_SIZE>
+class CursorPool {
+ public:
+  /**
+   * @brief The class `CursorHandle` exposes an atomic cursor and provides a
+   * convenient RAII way for managing its state.
+   *
+   * @note The class does not satisfy CopyConstructable and CopyAssignable
+   * concepts. However, it does satisfy MoveConstructable and MoveAssignable
+   * concepts.
+   *
+   */
+  class CursorHandle {
+   public:
+    CursorHandle(const CursorHandle &other) = delete;
+    CursorHandle &operator=(const CursorHandle &other) = delete;
+
+    /**
+     * @brief Construct a new Cursor Handle object.
+     *
+     */
+    CursorHandle();
+
+    /**
+     * @brief Construct a new Cursor Handle object.
+     *
+     * @param cursor Reference to the cursor.
+     * @param pool Reference to the cursor pool.
+     */
+    CursorHandle(std::atomic<Cursor> &cursor, CursorPool &pool);
+
+    /**
+     * @brief Construct a new cursor handle object.
+     *
+     * @param other Rvalue reference to other handle.
+     */
+    CursorHandle(CursorHandle &&other);
+
+    /**
+     * @brief Move assign cursor handle.
+     *
+     * @param other Rvalue reference to other handle.
+     * @returns Reference to the handle.
+     */
+    CursorHandle &operator=(CursorHandle &&other);
+
+    /**
+     * @brief Dereference operators
+     *
+     */
+    std::atomic<Cursor> &operator*() const;
+
+    /**
+     * @brief Reference operator
+     *
+     */
+    std::atomic<Cursor> *operator->() const;
+
+    /**
+     * @brief Check if handle is valid.
+     *
+     */
+    operator bool() const;
+
+    /**
+     * @brief Destroy the Cursor Handle object.
+     *
+     */
+    ~CursorHandle();
+
+   private:
+    /**
+     * @brief Release the allocated cursor back to the pool.
+     *
+     */
+    void Release();
+
+    std::atomic<Cursor> *cursor_;
+    CursorPool *pool_;
+  };
+
+  /**
+   * @brief Construct a new CursorPool object.
+   *
+   */
+  CursorPool();
+
+  /**
+   * @brief Allocate a cursor from available set of free cursors.
+   *
+   * The method attempts to allocate a free cursor by random selection. It
+   * performs `max_attempt` number of attempts. If no cursor is found then a
+   * null pointer is returned.
+   *
+   * @param max_attempt Maximum number of attempts to perform.
+   * @returns Pointer to the allocated cursor.
+   */
+  CursorHandle Allocate(std::size_t max_attempt);
+
+ private:
+  /**
+   * @brief Release an allocated cursor.
+   *
+   * @param cursor Pointer to the cursor.
+   */
+  void Release(std::atomic<Cursor> *cursor);
+
+  /**
+   * @brief Enumerated states of a cursor.
+   *
+   */
+  enum class CursorState {
+    FREE,       // Cursor free for use.
+    ALLOCATED,  // Cursor in use.
+  };
+  std::atomic<CursorState> cursor_state_[POOL_SIZE];
+  std::atomic<Cursor> cursor_[POOL_SIZE];
+};
+
+// ---------------------------------------
+// CursorPool::CursorHandle Implementation
+// ---------------------------------------
+
+template <std::size_t POOL_SIZE>
+void CursorPool<POOL_SIZE>::CursorHandle::Release() {
+  if (pool_) {
+    pool_->Release(cursor_);
+  }
+}
+
+// ------------- public ------------------
+
+template <std::size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::CursorHandle()
+    : cursor_(nullptr), pool_(nullptr) {}
+
+template <std::size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::CursorHandle(std::atomic<Cursor> &cursor,
+                                                  CursorPool &pool)
+    : cursor_(std::addressof(cursor)), pool_(std::addressof(pool)) {}
+
+template <std::size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::CursorHandle(CursorHandle &&other)
+    : cursor_(other.cursor_), pool_(other.pool_) {
+  other.cursor_ = nullptr;
+  other.pool_ = nullptr;
+}
+
+template <std::size_t POOL_SIZE>
+typename CursorPool<POOL_SIZE>::CursorHandle &
+CursorPool<POOL_SIZE>::CursorHandle::operator=(CursorHandle &&other) {
+  if (this != &other) {
+    Release();
+    cursor_ = other.cursor_;
+    pool_ = other.pool_;
+    other.cursor_ = nullptr;
+    other.pool_ = nullptr;
+  }
+  return *this;
+}
+
+template <std::size_t POOL_SIZE>
+std::atomic<Cursor> &CursorPool<POOL_SIZE>::CursorHandle::operator*() const {
+  return *cursor_;
+}
+
+template <std::size_t POOL_SIZE>
+std::atomic<Cursor> *CursorPool<POOL_SIZE>::CursorHandle::operator->() const {
+  return cursor_;
+}
+
+template <std::size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::operator bool() const {
+  return cursor_ != nullptr && pool_ != nullptr;
+}
+
+template <std::size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::~CursorHandle() {
+  Release();
+}
+
+// -------------------------
+// CursorPool Implementation
+// -------------------------
+
+template <std::size_t POOL_SIZE>
+void CursorPool<POOL_SIZE>::Release(std::atomic<Cursor> *cursor) {
+  assert(cursor != nullptr);
+  const std::size_t idx = cursor - cursor_;
+  cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
+}
+
+// ------- public -----------
+
+template <std::size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorPool() {
+  // Inital cursor value
+  Cursor cursor(false, 0);
+  for (size_t i = 0; i < POOL_SIZE; ++i) {
+    cursor_[i].store(cursor, std::memory_order_seq_cst);
+    cursor_state_[i].store(CursorState::FREE, std::memory_order_seq_cst);
+  }
+}
+
+template <std::size_t POOL_SIZE>
+typename CursorPool<POOL_SIZE>::CursorHandle CursorPool<POOL_SIZE>::Allocate(
+    std::size_t max_attempt) {
+  while (max_attempt) {
+    const size_t idx = rand() % POOL_SIZE;
+    auto expected = CursorState::FREE;
+    if (cursor_state_[idx].compare_exchange_strong(expected,
+                                                   CursorState::ALLOCATED)) {
+      return {cursor_[idx], *this};
+    }
+    --max_attempt;
+  }
+  return {};
+}
+
+// ============================================================================
 
 }  // namespace ring_buffer
 }  // namespace experimental
