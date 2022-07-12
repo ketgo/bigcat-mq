@@ -14,17 +14,97 @@
 
 #include <gtest/gtest.h>
 
-#include "utils/chrono.hpp"
+#include <unordered_set>
+
 #include "utils/debug.hpp"
+#include "utils/random.hpp"
 #include "utils/threads.hpp"
 
 #include <bigcat_mq/details/ring_buffer/cursor.hpp>
 
 namespace {
+
 constexpr auto kThreadCount = 10;
 constexpr auto kPoolSize = 10;
+constexpr auto kMaxAttempts = 32;
+constexpr auto kBufferSize = 124;
 
 using CursorPool = bigcat::details::ring_buffer::CursorPool<kPoolSize>;
+using Cursor = bigcat::details::ring_buffer::Cursor;
+
+/**
+ * @brief Cursor hasher
+ *
+ */
+class CursorHash {
+ public:
+  std::size_t operator()(const CursorPool::CursorHandle& handle) const {
+    return hash_(&(*handle));
+  }
+
+ private:
+  std::hash<Cursor*> hash_;
+};
+
+// Allocate method run from different threads
+void Allocate(CursorPool& pool, CursorPool::CursorHandle& handle) {
+  handle = std::move(pool.Allocate(kMaxAttempts));
+}
+
 }  // namespace
 
-TEST(RingBufferCursorPoolTestFixture, AllocateReleaseSingleThread) {}
+TEST(RingBufferCursorPoolTestFixture, AllocateSingleThread) {
+  CursorPool pool;
+
+  std::unordered_set<CursorPool::CursorHandle, CursorHash> handles;
+  for (size_t i = 0; i < kThreadCount; ++i) {
+    auto handle = pool.Allocate(kMaxAttempts);
+    if (handle) {
+      ASSERT_TRUE(handles.find(handle) == handles.end());
+      handles.insert(std::move(handle));
+    }
+  }
+  ASSERT_NE(handles.size(), 0);
+}
+
+TEST(RingBufferCursorPoolTestFixture, AllocateMultipleThread) {
+  CursorPool pool;
+
+  std::array<CursorPool::CursorHandle, kThreadCount> handles;
+  utils::Threads threads(kThreadCount);
+  for (size_t i = 0; i < kThreadCount; ++i) {
+    threads[i] = std::thread(&Allocate, std::ref(pool), std::ref(handles[i]));
+  }
+  threads.Wait();
+
+  // Tracking null handles
+  auto null_count = 0;
+  std::unordered_set<CursorPool::CursorHandle, CursorHash> unique_handles;
+  for (auto& handle : handles) {
+    if (!handle) {
+      ++null_count;
+    }
+    unique_handles.insert(std::move(handle));
+  }
+  ASSERT_EQ(unique_handles.size() - null_count, kThreadCount - null_count);
+}
+
+TEST(RingBufferCursorPoolTestFixture, WithinBoundSingleThread) {
+  CursorPool pool;
+
+  utils::RandomNumberGenerator<size_t> rand(kBufferSize / 2,
+                                            kBufferSize + kBufferSize / 2);
+  std::array<CursorPool::CursorHandle, kThreadCount> handles;
+  for (size_t i = 0; i < kThreadCount; ++i) {
+    handles[i] = pool.Allocate(kMaxAttempts);
+    if (handles[i]) {
+      handles[i]->store(rand());
+    }
+  }
+
+  ASSERT_FALSE(pool.WithinBounds(kBufferSize, kBufferSize / 4));
+  ASSERT_TRUE(pool.WithinBounds(kBufferSize, 3 * kBufferSize / 4));
+  ASSERT_TRUE(pool.WithinBounds(kBufferSize, kBufferSize + kBufferSize / 4));
+  ASSERT_FALSE(
+      pool.WithinBounds(kBufferSize, kBufferSize + 3 * kBufferSize / 4));
+}

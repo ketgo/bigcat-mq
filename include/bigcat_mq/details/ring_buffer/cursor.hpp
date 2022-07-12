@@ -63,6 +63,72 @@ template <size_t POOL_SIZE>
 class CursorPool {
  public:
   /**
+   * @brief The class `CursorHandle` exposes an allocated cursor and provides a
+   * convenient RAII way for releasing it back to a cursor pool on DTOR.
+   *
+   * @note The class does not satisfy CopyConstructable and CopyAssignable
+   * concepts. However, it does satisfy MoveConstructable and MoveAssignable
+   * concepts.
+   *
+   */
+  class CursorHandle {
+   public:
+    CursorHandle(const CursorHandle &other) = delete;
+    CursorHandle &operator=(const CursorHandle &other) = delete;
+
+    /**
+     * @brief Construct a new cursor handle object.
+     *
+     * @param cursor Pointer to the allocated cursor.
+     * @param pool Pointer to the cursor pool.
+     */
+    CursorHandle(Cursor *cursor = nullptr, CursorPool *pool = nullptr);
+
+    /**
+     * @brief Construct a new cursor handle object.
+     *
+     * @param other Rvalue reference to other handle.
+     */
+    CursorHandle(CursorHandle &&other);
+
+    /**
+     * @brief Move assign cursor handle.
+     *
+     * @param other Rvalue reference to other handle.
+     * @returns Reference to the handle.
+     */
+    CursorHandle &operator=(CursorHandle &&other);
+
+    /**
+     * @brief Dereference operators
+     *
+     */
+    Cursor &operator*() const;
+
+    /**
+     * @brief Reference operator
+     *
+     */
+    Cursor *operator->() const;
+
+    /**
+     * @brief Check if handle is valid.
+     *
+     */
+    operator bool() const;
+
+    /**
+     * @brief Destroy the Cursor Handle object.
+     *
+     */
+    ~CursorHandle();
+
+   private:
+    Cursor *cursor_;
+    CursorPool *pool_;
+  };
+
+  /**
    * @brief Construct a new CursorPool object.
    *
    */
@@ -78,14 +144,7 @@ class CursorPool {
    * @param max_attempt Maximum number of attempts to perform.
    * @returns Pointer to the allocated cursor.
    */
-  Cursor *Allocate(size_t max_attempt);
-
-  /**
-   * @brief Release an allocated cursor.
-   *
-   * @param cursor Pointer to the cursor.
-   */
-  void Release(Cursor *cursor);
+  CursorHandle Allocate(size_t max_attempt);
 
   /**
    * @brief Check if the given cursor value is within the index range occupied
@@ -106,6 +165,13 @@ class CursorPool {
 
  private:
   /**
+   * @brief Release an allocated cursor.
+   *
+   * @param cursor Pointer to the cursor.
+   */
+  void Release(Cursor *cursor);
+
+  /**
    * @brief Enumerated states of a cursor.
    *
    */
@@ -118,9 +184,67 @@ class CursorPool {
   std::atomic<CursorState> cursor_state_[POOL_SIZE];
 };
 
+// ---------------------------------------
+// CursorPool::CursorHandle Implementation
+// ---------------------------------------
+
+template <size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::CursorHandle(Cursor *cursor,
+                                                  CursorPool *pool)
+    : cursor_(cursor), pool_(pool) {}
+
+template <size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::CursorHandle(CursorHandle &&other)
+    : cursor_(other.cursor_), pool_(other.pool_) {
+  other.pool_ = nullptr;
+}
+
+template <size_t POOL_SIZE>
+typename CursorPool<POOL_SIZE>::CursorHandle &
+CursorPool<POOL_SIZE>::CursorHandle::operator=(CursorHandle &&other) {
+  if (this != &other) {
+    cursor_ = other.cursor_;
+    pool_ = other.pool_;
+    other.pool_ = nullptr;
+  }
+
+  return *this;
+}
+
+template <size_t POOL_SIZE>
+Cursor &CursorPool<POOL_SIZE>::CursorHandle::operator*() const {
+  return *cursor_;
+}
+
+template <size_t POOL_SIZE>
+Cursor *CursorPool<POOL_SIZE>::CursorHandle::operator->() const {
+  return cursor_;
+}
+
+template <size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::operator bool() const {
+  return cursor_ != nullptr;
+}
+
+template <size_t POOL_SIZE>
+CursorPool<POOL_SIZE>::CursorHandle::~CursorHandle() {
+  if (pool_) {
+    pool_->Release(cursor_);
+  }
+}
+
 // -------------------------
 // CursorPool Implementation
 // -------------------------
+
+template <size_t POOL_SIZE>
+void CursorPool<POOL_SIZE>::Release(Cursor *cursor) {
+  assert(cursor != nullptr);
+  const size_t idx = cursor - cursor_;
+  cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
+}
+
+// ------- public -----------
 
 template <size_t POOL_SIZE>
 CursorPool<POOL_SIZE>::CursorPool() {
@@ -131,24 +255,18 @@ CursorPool<POOL_SIZE>::CursorPool() {
 }
 
 template <size_t POOL_SIZE>
-Cursor *CursorPool<POOL_SIZE>::Allocate(size_t max_attempt) {
+typename CursorPool<POOL_SIZE>::CursorHandle CursorPool<POOL_SIZE>::Allocate(
+    size_t max_attempt) {
   while (max_attempt) {
     const size_t idx = rand() % POOL_SIZE;
     auto expected = CursorState::FREE;
     if (cursor_state_[idx].compare_exchange_strong(expected,
                                                    CursorState::ALLOCATED)) {
-      return &cursor_[idx];
+      return {&cursor_[idx], this};
     }
     --max_attempt;
   }
-  return nullptr;
-}
-
-template <size_t POOL_SIZE>
-void CursorPool<POOL_SIZE>::Release(Cursor *cursor) {
-  assert(cursor != nullptr);
-  const size_t idx = cursor - cursor_;
-  cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
+  return {nullptr, nullptr};
 }
 
 template <size_t POOL_SIZE>
@@ -157,7 +275,8 @@ bool CursorPool<POOL_SIZE>::WithinBounds(const size_t buffer_size,
   auto offset = cursor_value % buffer_size;
   auto cycle = cursor_value / buffer_size;
 
-  std::string message = "WithinBounds: [" + std::to_string(offset) + ", " +
+  std::string message = "WithinBounds: [" + std::to_string(cursor_value) +
+                        "][" + std::to_string(offset) + ", " +
                         std::to_string(cycle) + "] E {";
   // TODO: Scope for improvement by reducing the number of cursors to perform
   // checks.
@@ -167,8 +286,8 @@ bool CursorPool<POOL_SIZE>::WithinBounds(const size_t buffer_size,
       auto _value = cursor_[idx].load(std::memory_order_seq_cst);
       auto _offset = _value % buffer_size;
       auto _cycle = _value / buffer_size;
-      message +=
-          "[" + std::to_string(_offset) + ", " + std::to_string(_cycle) + "]";
+      message += "[" + std::to_string(_value) + "][" + std::to_string(_offset) +
+                 ", " + std::to_string(_cycle) + "] ";
       if (_cycle == cycle && _offset <= offset) {
         message += "} --> True";
         DPRINT(message);
@@ -179,68 +298,7 @@ bool CursorPool<POOL_SIZE>::WithinBounds(const size_t buffer_size,
 
   message += "} --> False";
   DPRINT(message);
-
   return false;
-}
-
-// ============================================================================
-
-/**
- * @brief The class `CursorGuard` is a convenient RAII way for releasing an
- * allocated cursor back to a cursor pool.
- *
- * @note The class does not satisfy CopyConstructable and CopyAssignable
- * concepts. However, it does satisfy MoveConstructable and MoveAssignable
- * concepts.
- *
- * @tparam CursorPool The type of cursor pool.
- */
-template <class CursorPool>
-class CursorGuard {
- public:
-  CursorGuard(Cursor *cursor = nullptr, CursorPool *pool = nullptr);
-  CursorGuard(const CursorGuard &other) = delete;
-  CursorGuard(CursorGuard &&other);
-  CursorGuard &operator=(const CursorGuard &other) = delete;
-  CursorGuard &operator=(CursorGuard &&other);
-  ~CursorGuard();
-
- private:
-  Cursor *cursor_;
-  CursorPool *pool_;
-};
-
-// ---------------------------
-// CursorGuard Implementation
-// ---------------------------
-
-template <class CursorPool>
-CursorGuard<CursorPool>::CursorGuard(Cursor *cursor, CursorPool *pool)
-    : cursor_(cursor), pool_(pool) {}
-
-template <class CursorPool>
-CursorGuard<CursorPool>::CursorGuard(CursorGuard &&other)
-    : cursor_(other.cursor_), pool_(other.pool_) {
-  other.pool_ = nullptr;
-}
-
-template <class CursorPool>
-CursorGuard<CursorPool> &CursorGuard<CursorPool>::operator=(
-    CursorGuard &&other) {
-  if (this != &other) {
-    cursor_ = other.cursor_;
-    pool_ = other.pool_;
-    other.pool_ = nullptr;
-  }
-
-  return *this;
-}
-
-template <class CursorPool>
-CursorGuard<CursorPool>::~CursorGuard() {
-  if (pool_) {
-    pool_->Release(cursor_);
-  }
 }
 
 // ============================================================================
