@@ -20,6 +20,15 @@
 #include <bigcat_mq/details/experimental/span.hpp>
 #include <bigcat_mq/details/experimental/circular_queue/allocator.hpp>
 
+// BUG:
+// a. Release cursors for stale processes which have abruptly died. Note that if
+//    we reprocess the message block pointed by these cursors we implement the
+//    AtleastOnce delivery and if we ignore these messages we implement the
+//    AtmostOnce delivery.
+// b. When the read ans write heads are both at the same location and once
+//    thread publishes while another consumes at the same time then a data race
+//    can happen where partially written memory block is read by the consumer
+
 namespace bigcat {
 namespace details {
 namespace experimental {
@@ -105,11 +114,6 @@ enum class CircularQueueResult {
  * Once the block is reserved, the message contained is loaded into a desired
  * variable from the buffer.
  *
- * TODO: Release cursors for stale processes which have abruptly died. Note that
- * if we reprocess the message block pointed by these cursors we implement the
- * AtleastOnce delivery and if we ignore these messages we implement the
- * AtmostOnce delivery.
- *
  * @tparam T The type of object stored in the circular queue.
  * @tparam BUFFER_SIZE The size of memory buffer in bytes.
  * @tparam MAX_PRODUCERS The maximum number of producers.
@@ -165,6 +169,12 @@ class CircularQueue {
   CircularQueueResult Consume(ReadSpan &span,
                               size_t max_attempt = defaultMaxAttempt()) const;
 
+  /**
+   * @brief Get the raw data in the circular queue.
+   *
+   */
+  const unsigned char *Data() const;
+
  private:
   circular_queue::Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>
       allocator_;
@@ -211,6 +221,13 @@ CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Consume(
     --max_attempt;
   }
   return CircularQueueResult::ERROR_BUFFER_EMPTY;
+}
+
+template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
+          size_t MAX_CONSUMERS>
+const unsigned char *
+CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Data() const {
+  return allocator_.Data();
 }
 
 // -------------------------

@@ -93,10 +93,14 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
     // Allocate chunk only if the end cursor is ahead of all the allocated
     // read cursors
     if (read_pool_.IsAheadOrEqual(end)) {
+      // @note: We store the start value in the allocated cursor before the
+      // following if statement so that the `IsBehindOrEqual` or
+      // `IsAheadOrEqual` methods of the cursor pool use the latest tested or
+      // set location in the allocated cursor.
+      cursor_h->store(start, std::memory_order_seq_cst);
       // Set write head to new value if its original value has not been already
       // changed by another writer.
       if (write_pool_.Head().compare_exchange_weak(start, end)) {
-        cursor_h->store(start, std::memory_order_seq_cst);
         auto* block = reinterpret_cast<MemoryBlock<T>*>(
             &data_[start.Location() % BUFFER_SIZE]);
         block->size = size;
@@ -128,14 +132,19 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
     auto start = read_pool_.Head().load(std::memory_order_seq_cst);
     auto* block = reinterpret_cast<MemoryBlock<const T>*>(
         const_cast<unsigned char*>(&data_[start.Location() % BUFFER_SIZE]));
-    auto end = start + block->size;
+    auto block_size = sizeof(MemoryBlock<T>) + block->size * sizeof(T);
+    auto end = start + block_size;
     // Allocate chunk only if the end cursor is behind all the allocated write
     // cursors
-    if (write_pool_.IsBehind(end)) {
+    if (write_pool_.IsBehindOrEqual(end)) {
+      // @note: We store the start value in the allocated cursor before the
+      // following if statement so that the `IsBehindOrEqual` or
+      // `IsAheadOrEqual` methods of the cursor pool use the latest tested or
+      // set location in the allocated cursor.
+      cursor_h->store(start, std::memory_order_seq_cst);
       // Set read head to new value if its original value has not been already
       // changed by another reader.
       if (read_pool_.Head().compare_exchange_weak(start, end)) {
-        cursor_h->store(start, std::memory_order_seq_cst);
         return {*block, std::move(cursor_h)};
       }
       // Another reader allocated memory before us so try again until success or

@@ -307,7 +307,7 @@ class CursorPool {
 
  public:
   /**
-   * @brief hread safe fast pseudo random number generator.
+   * @brief Thread safe fast pseudo random number generator.
    *
    */
   static std::size_t Random();
@@ -325,13 +325,15 @@ class CursorPool {
    */
   std::atomic<Cursor> &Head();
 
+  // TODO: Move back to IsBehind from IsBehindOrEqual.
+
   /**
    * @brief Check if the given cursor is behind all the allocated cursors in the
-   * pool along with the head cursor.
+   * pool or equals the head cursor.
    *
-   * @returns `true` if behind else `false`.
+   * @returns `true` if behind or equal else `false`.
    */
-  bool IsBehind(const Cursor &cursor) const;
+  bool IsBehindOrEqual(const Cursor &cursor) const;
 
   /**
    * @brief Check if the given cursor is ahead of all the allocated cursors in
@@ -420,16 +422,16 @@ std::atomic<Cursor> &CursorPool<POOL_SIZE>::Head() {
 }
 
 template <std::size_t POOL_SIZE>
-bool CursorPool<POOL_SIZE>::IsBehind(const Cursor &cursor) const {
+bool CursorPool<POOL_SIZE>::IsBehindOrEqual(const Cursor &cursor) const {
   auto head = head_.load(std::memory_order_seq_cst);
-  if (head <= cursor) {
+  if (head < cursor) {
     return false;
   }
   for (std::size_t idx = 0; idx < POOL_SIZE; ++idx) {
     if (cursor_state_[idx].load(std::memory_order_seq_cst) ==
         CursorState::ALLOCATED) {
       auto _cursor = cursor_[idx].load(std::memory_order_seq_cst);
-      if (_cursor <= cursor) {
+      if (_cursor < cursor) {
         return false;
       }
     }

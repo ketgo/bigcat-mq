@@ -67,7 +67,7 @@ void Print(const U* start, const size_t size, const char sep = ',',
 }
 
 TEST_F(CircularQueueTestFixture, TestPublishConsumeSingleThread) {
-  constexpr auto kMessageCount = 2;
+  constexpr auto kMessageCount = 3;
 
   std::unordered_set<std::string> write_data;
   for (size_t i = 0; i < kMessageCount; ++i) {
@@ -76,12 +76,69 @@ TEST_F(CircularQueueTestFixture, TestPublishConsumeSingleThread) {
     write_data.insert(data);
   }
 
-  // Print<unsigned char>(queue_.Data(), kBufferSize);
-
   for (size_t i = 0; i < kMessageCount; ++i) {
     Queue::ReadSpan span;
     ASSERT_EQ(queue_.Consume(span), CircularQueueResult::SUCCESS);
     std::string data(span.Data(), span.Size());
     ASSERT_TRUE(write_data.find(data) != write_data.end());
+  }
+}
+
+TEST_F(CircularQueueTestFixture,
+       TestPublishMultipleThreadsConsumeSingleThread) {
+  constexpr auto kThreadCount = 5;
+
+  std::array<std::string, kThreadCount> write_data;
+  std::array<std::string, kThreadCount> read_data;
+  for (size_t i = 0; i < kThreadCount; ++i) {
+    write_data[i] = "testing_" + std::to_string(i);
+  }
+  utils::RandomDelayGenerator<> rand(1, 5);
+
+  {
+    utils::Threads producers(kThreadCount);
+    for (size_t i = 0; i < kThreadCount; ++i) {
+      producers[i] = std::thread(&CircularQueueTestFixture::Publish, this,
+                                 std::ref(write_data[i]), rand());
+    }
+
+    for (size_t i = 0; i < kThreadCount; ++i) {
+      Consume(read_data[i]);
+    }
+  }
+
+  // TODO: ASSERT consumed data
+  for (size_t i = 0; i < kThreadCount; ++i) {
+    std::cout << read_data[i] << "\n";
+  }
+}
+
+TEST_F(CircularQueueTestFixture, TestPublishConsumeMultipleThreads) {
+  constexpr auto kProducers = 5;
+  constexpr auto kConsumers = 5;
+
+  std::array<std::string, kProducers> write_data;
+  std::array<std::string, kConsumers> read_data;
+  for (size_t i = 0; i < kProducers; ++i) {
+    write_data[i] = "testing_" + std::to_string(i);
+  }
+  utils::RandomDelayGenerator<> rand(1, 5);
+
+  {
+    utils::Threads producers(kProducers);
+    utils::Threads consumers(kConsumers);
+    for (size_t i = 0; i < kProducers; ++i) {
+      producers[i] = std::thread(&CircularQueueTestFixture::Publish, this,
+                                 std::ref(write_data[i]), rand());
+    }
+    for (size_t i = 0; i < kConsumers; ++i) {
+      consumers[i] = std::thread(&CircularQueueTestFixture::Consume, this,
+                                 std::ref(read_data[i]), rand());
+    }
+  }
+
+  // TODO: ASSERT consumed data
+  for (size_t i = 0; i < kConsumers; ++i) {
+    std::cout << read_data[i] << "\n";
   }
 }

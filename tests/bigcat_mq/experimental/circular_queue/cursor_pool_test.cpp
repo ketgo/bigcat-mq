@@ -99,7 +99,7 @@ TEST(CircularQueueCursorPoolTestFixture, AllocateMultipleThread) {
   ASSERT_EQ(unique_cursors.size(), kThreadCount - null_count);
 }
 
-TEST(CircularQueueCursorPoolTestFixture, IsBehindSingleThread) {
+TEST(CircularQueueCursorPoolTestFixture, IsBehindOrEqualSingleThread) {
   utils::RandomNumberGenerator<size_t> rand(kBufferSize / 2,
                                             kBufferSize + kBufferSize / 2);
   size_t min = std::numeric_limits<size_t>::max();
@@ -122,11 +122,12 @@ TEST(CircularQueueCursorPoolTestFixture, IsBehindSingleThread) {
   cursor.SetLocation(max);
   pool.Head().store(cursor, std::memory_order_seq_cst);
 
-  ASSERT_TRUE(pool.IsBehind({false, min / 2}));
-  ASSERT_FALSE(pool.IsBehind({false, (min + max) / 2}));
-  ASSERT_FALSE(pool.IsBehind({false, 2 * max}));
-  ASSERT_FALSE(pool.IsBehind({true, min / 2}));
-  ASSERT_TRUE(pool.IsBehind({true, 2 * max}));
+  ASSERT_TRUE(pool.IsBehindOrEqual({false, min / 2}));
+  ASSERT_TRUE(pool.IsBehindOrEqual({false, min}));  // equality check
+  ASSERT_FALSE(pool.IsBehindOrEqual({false, (min + max) / 2}));
+  ASSERT_FALSE(pool.IsBehindOrEqual({false, 2 * max}));
+  ASSERT_FALSE(pool.IsBehindOrEqual({true, min / 2}));
+  ASSERT_TRUE(pool.IsBehindOrEqual({true, 2 * max}));
 }
 
 TEST(CircularQueueCursorPoolTestFixture, IsAheadOrEqualSingleThread) {
