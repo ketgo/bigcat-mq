@@ -14,19 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__SPAN_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__SPAN_HPP
+#include <gtest/gtest.h>
 
-namespace bigcat {
-namespace details {
-namespace experimental {
-namespace ring_buffer {
+#include <bigcat_mq/details/experimental/ring_buffer/allocator.hpp>
 
-class WriteSpan {};
-
-}  // namespace ring_buffer
-}  // namespace experimental
-}  // namespace details
-}  // namespace bigcat
-
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__SPAN_HPP */
+TEST(RingBufferAllocatorTestFixture, ReadAllocateSingleThread) {}
