@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__BLOCK_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__BLOCK_HPP
+#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__BLOCK_HPP
+#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__BLOCK_HPP
 
 #include <type_traits>
 
-#include <bigcat_mq/details/experimental/ring_buffer/cursor.hpp>
+#include <bigcat_mq/details/experimental/circular_queue/cursor.hpp>
 
 namespace bigcat {
 namespace details {
 namespace experimental {
-namespace ring_buffer {
+namespace circular_queue {
 
 // ============================================================================
 
 /**
- * @brief Data structure representing a memory block in the ring buffer.
+ * @brief Data structure representing a memory block in the circular queue.
  *
  * @tparam T Type of objects stored in the memory block.
  */
@@ -46,7 +46,7 @@ struct __attribute__((packed)) MemoryBlock {
 // ============================================================================
 
 /**
- * @brief Handle to an allocated memory block in the ring buffer. It exposes
+ * @brief Handle to an allocated memory block in the circular queue. It exposes
  * the allocated memory for reading or writing.
  *
  * @note The class does not satisfy CopyConstructable and CopyAssignable
@@ -115,7 +115,7 @@ MemoryBlockHandle<T, CursorPool>::MemoryBlockHandle()
 template <class T, class CursorPool>
 MemoryBlockHandle<T, CursorPool>::MemoryBlockHandle(
     MemoryBlock<T>& block, CursorHandle<CursorPool>&& handle)
-    : block_(std::addressof(block)), handle_(handle) {}
+    : block_(std::addressof(block)), handle_(std::move(handle)) {}
 
 template <class T, class CursorPool>
 std::size_t MemoryBlockHandle<T, CursorPool>::Size() const {
@@ -140,9 +140,9 @@ MemoryBlockHandle<T, CursorPool>::operator bool() const {
 
 // ============================================================================
 
-}  // namespace ring_buffer
+}  // namespace circular_queue
 }  // namespace experimental
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__BLOCK_HPP */
+#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__BLOCK_HPP */

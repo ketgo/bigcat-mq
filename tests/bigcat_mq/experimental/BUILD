@@ -13,15 +13,14 @@
 # limitations under the License.
 
 cc_test(
-    name = "ring_buffer_test",
+    name = "circular_queue_test",
     srcs = [
-        "ring_buffer_test.cpp",
+        "circular_queue_test.cpp",
     ],
     args = ["--gtest_repeat=10"],
     deps = [
         "//:bigcat_mq",
         "//utils:chrono",
-        "//utils:debug",
         "//utils:threads",
         "@gtest//:gtest_main",
     ],

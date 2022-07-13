@@ -19,7 +19,7 @@
 #include <array>
 #include <unordered_set>
 
-#include <bigcat_mq/details/experimental/ring_buffer/cursor.hpp>
+#include <bigcat_mq/details/experimental/circular_queue/cursor.hpp>
 
 #include "utils/random.hpp"
 #include "utils/threads.hpp"
@@ -33,9 +33,9 @@ constexpr auto kPoolSize = 10;
 constexpr auto kMaxAttempts = 32;
 constexpr auto kBufferSize = 124;
 
-using AtomicCursor = std::atomic<ring_buffer::Cursor>;
-using CursorPool = ring_buffer::CursorPool<kPoolSize>;
-using CursorHandle = ring_buffer::CursorHandle<CursorPool>;
+using AtomicCursor = std::atomic<circular_queue::Cursor>;
+using CursorPool = circular_queue::CursorPool<kPoolSize>;
+using CursorHandle = circular_queue::CursorHandle<CursorPool>;
 
 // AtomicCursor hasher
 class AtomicCursorHash {
@@ -55,7 +55,11 @@ void Allocate(CursorPool& pool, CursorHandle& handle) {
 
 }  // namespace
 
-TEST(RingBufferCursorPoolTestFixture, AllocateSingleThread) {
+TEST(CircularQueueCursorPoolTestFixture, TestRandom) {
+  ASSERT_NE(CursorPool::Random(), CursorPool::Random());
+}
+
+TEST(CircularQueueCursorPoolTestFixture, AllocateSingleThread) {
   CursorPool pool;
 
   std::array<CursorHandle, kThreadCount> handles;
@@ -72,7 +76,7 @@ TEST(RingBufferCursorPoolTestFixture, AllocateSingleThread) {
   ASSERT_EQ(unique_cursors.size(), kThreadCount - null_count);
 }
 
-TEST(RingBufferCursorPoolTestFixture, AllocateMultipleThread) {
+TEST(CircularQueueCursorPoolTestFixture, AllocateMultipleThread) {
   CursorPool pool;
 
   std::array<CursorHandle, kThreadCount> handles;
@@ -95,7 +99,7 @@ TEST(RingBufferCursorPoolTestFixture, AllocateMultipleThread) {
   ASSERT_EQ(unique_cursors.size(), kThreadCount - null_count);
 }
 
-TEST(RingBufferCursorPoolTestFixture, IsBehindSingleThread) {
+TEST(CircularQueueCursorPoolTestFixture, IsBehindSingleThread) {
   utils::RandomNumberGenerator<size_t> rand(kBufferSize / 2,
                                             kBufferSize + kBufferSize / 2);
   size_t min = std::numeric_limits<size_t>::max();
@@ -125,7 +129,7 @@ TEST(RingBufferCursorPoolTestFixture, IsBehindSingleThread) {
   ASSERT_TRUE(pool.IsBehind({true, 2 * max}));
 }
 
-TEST(RingBufferCursorPoolTestFixture, IsAheadOrEqualSingleThread) {
+TEST(CircularQueueCursorPoolTestFixture, IsAheadOrEqualSingleThread) {
   utils::RandomNumberGenerator<size_t> rand(kBufferSize / 2,
                                             kBufferSize + kBufferSize / 2);
   size_t min = std::numeric_limits<size_t>::max();

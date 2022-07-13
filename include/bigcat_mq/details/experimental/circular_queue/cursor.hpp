@@ -14,31 +14,29 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__CURSOR_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__CURSOR_HPP
+#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__CURSOR_HPP
+#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__CURSOR_HPP
 
 #include <atomic>
 #include <cassert>
 
-#include <bigcat_mq/details/experimental/ring_buffer/random.hpp>
-
 namespace bigcat {
 namespace details {
 namespace experimental {
-namespace ring_buffer {
+namespace circular_queue {
 
 // ============================================================================
 
 /**
- * @brief Ring buffer cursor.
+ * @brief Circular queue cursor.
  *
- * The cursor represents a location to an object inside the ring buffer. A 64
+ * The cursor represents a location to an object inside the circular queue. A 64
  * bit data structure is used to store the following values:
  *
  *  a. [Bit 0]: Overflow sign of the cursor. The overflow sign is used to check
  *              for the overflow phase. Upon overflow the sign is flipped.
  *  b. [Bits 1-63]: Location value of the cursor used to get the index of an
- *                  object in the ring buffer.
+ *                  object in the circular queue.
  *
  * @note The cursor is restricted to 64 bits in order to make the atomic type
  * `std::atomic<Cursor>` lock free.
@@ -297,9 +295,9 @@ CursorHandle<CursorPool>::~CursorHandle() {
 // ============================================================================
 
 /**
- * @brief A lock-free and wait-free pool of cursors used by the ring buffer for
- * read/write operations. The pool also contains the head cursor which contains
- * the read/write head location.
+ * @brief A lock-free and wait-free pool of cursors used by the circular queue
+ * for read/write operations. The pool also contains the head cursor which
+ * contains the read/write head location.
  *
  * @tparam POOL_SIZE Number of cursors in the pool.
  */
@@ -308,6 +306,12 @@ class CursorPool {
   friend class CursorHandle<CursorPool>;
 
  public:
+  /**
+   * @brief hread safe fast pseudo random number generator.
+   *
+   */
+  static std::size_t Random();
+
   /**
    * @brief Construct a new CursorPool object.
    *
@@ -383,6 +387,22 @@ void CursorPool<POOL_SIZE>::Release(std::atomic<Cursor> *cursor) {
 
 // ------- public --------------
 
+// static
+template <std::size_t POOL_SIZE>
+std::size_t CursorPool<POOL_SIZE>::Random() {
+  // Implementation of a Xorshoft generator with a period of 2^96-1.
+  // https://stackoverflow.com/questions/1640258/need-a-fast-random-generator-for-c
+  thread_local size_t x = 123456789, y = 362436069, z = 521288629;
+  x ^= x << 16;
+  x ^= x >> 5;
+  x ^= x << 1;
+  auto t = x;
+  x = y;
+  y = z;
+  z = t ^ x ^ y;
+  return z;
+}
+
 template <std::size_t POOL_SIZE>
 CursorPool<POOL_SIZE>::CursorPool() {
   // Inital cursor value
@@ -439,7 +459,7 @@ template <std::size_t POOL_SIZE>
 CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
     std::size_t max_attempt) {
   while (max_attempt) {
-    const std::size_t idx = rand() % POOL_SIZE;
+    const std::size_t idx = Random() % POOL_SIZE;
     auto expected = CursorState::FREE;
     if (cursor_state_[idx].compare_exchange_strong(expected,
                                                    CursorState::ALLOCATED)) {
@@ -452,9 +472,9 @@ CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
 
 // ============================================================================
 
-}  // namespace ring_buffer
+}  // namespace circular_queue
 }  // namespace experimental
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__CURSOR_HPP */
+#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__CURSOR_HPP */

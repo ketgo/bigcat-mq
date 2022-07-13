@@ -13,17 +13,6 @@
 # limitations under the License.
 
 cc_test(
-    name = "random_test",
-    srcs = [
-        "random_test.cpp",
-    ],
-    deps = [
-        "//:bigcat_mq",
-        "@gtest//:gtest_main",
-    ],
-)
-
-cc_test(
     name = "cursor_test",
     srcs = [
         "cursor_test.cpp",
@@ -43,20 +32,6 @@ cc_test(
     deps = [
         "//:bigcat_mq",
         "//utils:random",
-        "//utils:threads",
-        "@gtest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "allocator_test",
-    srcs = [
-        "allocator_test.cpp",
-    ],
-    args = ["--gtest_repeat=10"],
-    deps = [
-        "//:bigcat_mq",
-        "//utils:chrono",
         "//utils:threads",
         "@gtest//:gtest_main",
     ],

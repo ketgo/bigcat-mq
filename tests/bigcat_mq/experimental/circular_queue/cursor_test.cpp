@@ -16,18 +16,18 @@
 
 #include <gtest/gtest.h>
 
-#include <bigcat_mq/details/experimental/ring_buffer/cursor.hpp>
+#include <bigcat_mq/details/experimental/circular_queue/cursor.hpp>
 
 using namespace bigcat::details::experimental;
 
 namespace {
 
-using Cursor = ring_buffer::Cursor;
-using AtomicCursor = std::atomic<ring_buffer::Cursor>;
+using Cursor = circular_queue::Cursor;
+using AtomicCursor = std::atomic<circular_queue::Cursor>;
 
 }  // namespace
 
-TEST(RingBufferCursorTestFixture, AddOperation) {
+TEST(CircularQueueCursorTestFixture, AddOperation) {
   Cursor cursor(false, std::numeric_limits<std::size_t>::max());
 
   auto new_cursor = cursor + 5;
@@ -35,6 +35,6 @@ TEST(RingBufferCursorTestFixture, AddOperation) {
   ASSERT_EQ(new_cursor.Location(), 4);
 }
 
-TEST(RingBufferCursorTestFixture, AtomicCursorIsLockFree) {
+TEST(CircularQueueCursorTestFixture, AtomicCursorIsLockFree) {
   ASSERT_TRUE(AtomicCursor().is_lock_free());
 }
