@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <unordered_set>
 
 #include <bigcat_mq/details/experimental/ring_buffer/cursor.hpp>
@@ -49,7 +50,7 @@ class AtomicCursorHash {
 
 // Allocate method run from different threads
 void Allocate(CursorPool& pool, CursorHandle& handle) {
-  handle = std::move(pool.Allocate(kMaxAttempts));
+  handle = pool.Allocate(kMaxAttempts);
 }
 
 }  // namespace
@@ -57,15 +58,18 @@ void Allocate(CursorPool& pool, CursorHandle& handle) {
 TEST(RingBufferCursorPoolTestFixture, AllocateSingleThread) {
   CursorPool pool;
 
-  std::unordered_set<CursorHandle, AtomicCursorHash> handles;
+  std::array<CursorHandle, kThreadCount> handles;
+  auto null_count = 0;
+  std::unordered_set<AtomicCursor*> unique_cursors;
   for (size_t i = 0; i < kThreadCount; ++i) {
-    auto handle = pool.Allocate(kMaxAttempts);
-    if (handle) {
-      ASSERT_TRUE(handles.find(handle) == handles.end());
-      handles.insert(std::move(handle));
+    handles[i] = pool.Allocate(kMaxAttempts);
+    if (!handles[i]) {
+      ++null_count;
+    } else {
+      unique_cursors.insert(&(*handles[i]));
     }
   }
-  ASSERT_NE(handles.size(), 0);
+  ASSERT_EQ(unique_cursors.size(), kThreadCount - null_count);
 }
 
 TEST(RingBufferCursorPoolTestFixture, AllocateMultipleThread) {
@@ -80,14 +84,15 @@ TEST(RingBufferCursorPoolTestFixture, AllocateMultipleThread) {
 
   // Tracking null handles
   auto null_count = 0;
-  std::unordered_set<CursorHandle, AtomicCursorHash> unique_handles;
+  std::unordered_set<AtomicCursor*> unique_cursors;
   for (auto& handle : handles) {
     if (!handle) {
       ++null_count;
+    } else {
+      unique_cursors.insert(&(*handle));
     }
-    unique_handles.insert(std::move(handle));
   }
-  ASSERT_EQ(unique_handles.size() - null_count, kThreadCount - null_count);
+  ASSERT_EQ(unique_cursors.size(), kThreadCount - null_count);
 }
 
 TEST(RingBufferCursorPoolTestFixture, IsBehindSingleThread) {
