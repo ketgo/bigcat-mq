@@ -19,12 +19,12 @@
 #include <array>
 #include <unordered_set>
 
-#include <bigcat_mq/details/experimental/circular_queue/cursor.hpp>
+#include <bigcat_mq/details/circular_queue/cursor.hpp>
 
 #include "utils/random.hpp"
 #include "utils/threads.hpp"
 
-using namespace bigcat::details::experimental;
+using namespace bigcat::details;
 
 namespace {
 

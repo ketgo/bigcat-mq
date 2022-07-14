@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
-#include <bigcat_mq/details/experimental/circular_queue/cursor.hpp>
+#include <bigcat_mq/details/circular_queue/cursor.hpp>
 
-using namespace bigcat::details::experimental;
+using namespace bigcat::details;
 
 namespace {
 

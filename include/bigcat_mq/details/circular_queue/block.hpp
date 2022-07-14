@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__BLOCK_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__BLOCK_HPP
+#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__BLOCK_HPP
+#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__BLOCK_HPP
 
 #include <type_traits>
 
-#include <bigcat_mq/details/experimental/circular_queue/cursor.hpp>
+#include <bigcat_mq/details/circular_queue/cursor.hpp>
 
 namespace bigcat {
 namespace details {
-namespace experimental {
 namespace circular_queue {
 
 // ============================================================================
@@ -141,8 +140,7 @@ MemoryBlockHandle<T, CursorPool>::operator bool() const {
 // ============================================================================
 
 }  // namespace circular_queue
-}  // namespace experimental
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__BLOCK_HPP */
+#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__BLOCK_HPP */

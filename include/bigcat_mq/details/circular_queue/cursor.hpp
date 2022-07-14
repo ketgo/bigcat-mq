@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__CURSOR_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__CURSOR_HPP
+#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__CURSOR_HPP
+#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__CURSOR_HPP
 
 #include <atomic>
 #include <cassert>
 
 namespace bigcat {
 namespace details {
-namespace experimental {
 namespace circular_queue {
 
 // ============================================================================
@@ -423,14 +422,14 @@ std::atomic<Cursor> &CursorPool<POOL_SIZE>::Head() {
 
 template <std::size_t POOL_SIZE>
 bool CursorPool<POOL_SIZE>::IsBehindOrEqual(const Cursor &cursor) const {
-  auto head = head_.load(std::memory_order_seq_cst);
+  auto head = head_.load(std::memory_order_acquire);
   if (head < cursor) {
     return false;
   }
   for (std::size_t idx = 0; idx < POOL_SIZE; ++idx) {
-    if (cursor_state_[idx].load(std::memory_order_seq_cst) ==
+    if (cursor_state_[idx].load(std::memory_order_acquire) ==
         CursorState::ALLOCATED) {
-      auto _cursor = cursor_[idx].load(std::memory_order_seq_cst);
+      auto _cursor = cursor_[idx].load(std::memory_order_acquire);
       if (_cursor < cursor) {
         return false;
       }
@@ -441,14 +440,14 @@ bool CursorPool<POOL_SIZE>::IsBehindOrEqual(const Cursor &cursor) const {
 
 template <std::size_t POOL_SIZE>
 bool CursorPool<POOL_SIZE>::IsAheadOrEqual(const Cursor &cursor) const {
-  auto head = head_.load(std::memory_order_seq_cst);
+  auto head = head_.load(std::memory_order_acquire);
   if (cursor < head) {
     return false;
   }
   for (std::size_t idx = 0; idx < POOL_SIZE; ++idx) {
-    if (cursor_state_[idx].load(std::memory_order_seq_cst) ==
+    if (cursor_state_[idx].load(std::memory_order_acquire) ==
         CursorState::ALLOCATED) {
-      auto _cursor = cursor_[idx].load(std::memory_order_seq_cst);
+      auto _cursor = cursor_[idx].load(std::memory_order_acquire);
       if (cursor < _cursor) {
         return false;
       }
@@ -463,8 +462,8 @@ CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
   while (max_attempt) {
     const std::size_t idx = Random() % POOL_SIZE;
     auto expected = CursorState::FREE;
-    if (cursor_state_[idx].compare_exchange_strong(expected,
-                                                   CursorState::ALLOCATED)) {
+    if (cursor_state_[idx].compare_exchange_strong(
+            expected, CursorState::ALLOCATED, std::memory_order_acq_rel)) {
       return {cursor_[idx], *this};
     }
     --max_attempt;
@@ -475,8 +474,7 @@ CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
 // ============================================================================
 
 }  // namespace circular_queue
-}  // namespace experimental
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__CURSOR_HPP */
+#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__CURSOR_HPP */

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__SPAN_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__SPAN_HPP
+#ifndef BIGCAT_MQ__DETAILS__SPAN_HPP
+#define BIGCAT_MQ__DETAILS__SPAN_HPP
 
 #include <array>
 #include <string>
@@ -24,7 +24,6 @@
 
 namespace bigcat {
 namespace details {
-namespace experimental {
 
 /**
  * @brief The class `Span` encapsulates a block of contiguous memory.
@@ -101,8 +100,7 @@ class Span {
   const T *data_;
 };
 
-}  // namespace experimental
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__RING_BUFFER__SPAN_HPP */
+#endif /* BIGCAT_MQ__DETAILS__SPAN_HPP */

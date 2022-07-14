@@ -18,18 +18,18 @@
 
 #include <gtest/gtest.h>
 
-#include <bigcat_mq/details/experimental/circular_queue.hpp>
+#include <bigcat_mq/details/circular_queue.hpp>
 
 #include "utils/chrono.hpp"
 #include "utils/threads.hpp"
 
-using namespace bigcat::details::experimental;
+using namespace bigcat::details;
 
 class CircularQueueTestFixture : public ::testing::Test {
  protected:
-  static constexpr auto kBufferSize = 100;
-  static constexpr auto kMaxProducers = 5;
-  static constexpr auto kMaxConsumers = 5;
+  static constexpr auto kBufferSize = 521;
+  static constexpr auto kMaxProducers = 100;
+  static constexpr auto kMaxConsumers = 100;
 
   using Queue = CircularQueue<char, kBufferSize, kMaxProducers, kMaxConsumers>;
   Queue queue_;
@@ -56,18 +56,8 @@ class CircularQueueTestFixture : public ::testing::Test {
   }
 };
 
-template <class T, class U>
-void Print(const U* start, const size_t size, const char sep = ',',
-           const char end = '\n') {
-  const auto len = size * sizeof(U) / sizeof(T);
-  for (size_t i = 0; i < len; ++i) {
-    std::cout << *(reinterpret_cast<const T*>(start) + i) << sep;
-  }
-  std::cout << end;
-}
-
 TEST_F(CircularQueueTestFixture, TestPublishConsumeSingleThread) {
-  constexpr auto kMessageCount = 3;
+  constexpr auto kMessageCount = 10;
 
   std::unordered_set<std::string> write_data;
   for (size_t i = 0; i < kMessageCount; ++i) {
@@ -86,7 +76,7 @@ TEST_F(CircularQueueTestFixture, TestPublishConsumeSingleThread) {
 
 TEST_F(CircularQueueTestFixture,
        TestPublishMultipleThreadsConsumeSingleThread) {
-  constexpr auto kThreadCount = 5;
+  constexpr auto kThreadCount = 10;
 
   std::array<std::string, kThreadCount> write_data;
   std::array<std::string, kThreadCount> read_data;
@@ -107,15 +97,15 @@ TEST_F(CircularQueueTestFixture,
     }
   }
 
-  // TODO: ASSERT consumed data
-  for (size_t i = 0; i < kThreadCount; ++i) {
-    std::cout << read_data[i] << "\n";
+  for (auto& data : write_data) {
+    ASSERT_TRUE(std::find(read_data.begin(), read_data.end(), data) !=
+                read_data.end());
   }
 }
 
 TEST_F(CircularQueueTestFixture, TestPublishConsumeMultipleThreads) {
-  constexpr auto kProducers = 5;
-  constexpr auto kConsumers = 5;
+  constexpr auto kProducers = 10;
+  constexpr auto kConsumers = 10;
 
   std::array<std::string, kProducers> write_data;
   std::array<std::string, kConsumers> read_data;
@@ -137,8 +127,8 @@ TEST_F(CircularQueueTestFixture, TestPublishConsumeMultipleThreads) {
     }
   }
 
-  // TODO: ASSERT consumed data
-  for (size_t i = 0; i < kConsumers; ++i) {
-    std::cout << read_data[i] << "\n";
+  for (auto& data : write_data) {
+    ASSERT_TRUE(std::find(read_data.begin(), read_data.end(), data) !=
+                read_data.end());
   }
 }

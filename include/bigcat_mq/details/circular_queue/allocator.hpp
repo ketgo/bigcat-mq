@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__ALLOCATOR_HPP
-#define BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__ALLOCATOR_HPP
+#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__ALLOCATOR_HPP
+#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__ALLOCATOR_HPP
 
-#include <bigcat_mq/details/experimental/circular_queue/block.hpp>
+#include <bigcat_mq/details/circular_queue/block.hpp>
 
 namespace bigcat {
 namespace details {
-namespace experimental {
 namespace circular_queue {
 
 /**
@@ -88,16 +87,16 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
   }
   // Attempt to allocate the requested size of space in the buffer for writing.
   while (max_attempt) {
-    auto start = write_pool_.Head().load(std::memory_order_seq_cst);
+    auto start = write_pool_.Head().load(std::memory_order_acquire);
     auto end = start + block_size;
+    // @note: We store the start value in the allocated cursor before the
+    // following if statement so that the `IsBehindOrEqual` or `IsAheadOrEqual`
+    // methods of the cursor pool use the latest tested or set location in the
+    // allocated cursor.
+    cursor_h->store(start, std::memory_order_release);
     // Allocate chunk only if the end cursor is ahead of all the allocated
     // read cursors
     if (read_pool_.IsAheadOrEqual(end)) {
-      // @note: We store the start value in the allocated cursor before the
-      // following if statement so that the `IsBehindOrEqual` or
-      // `IsAheadOrEqual` methods of the cursor pool use the latest tested or
-      // set location in the allocated cursor.
-      cursor_h->store(start, std::memory_order_seq_cst);
       // Set write head to new value if its original value has not been already
       // changed by another writer.
       if (write_pool_.Head().compare_exchange_weak(start, end)) {
@@ -129,19 +128,19 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Allocate(
   }
   // Attempt to allocate the requested size of space in the buffer for reading.
   while (max_attempt) {
-    auto start = read_pool_.Head().load(std::memory_order_seq_cst);
+    auto start = read_pool_.Head().load(std::memory_order_acquire);
     auto* block = reinterpret_cast<MemoryBlock<const T>*>(
         const_cast<unsigned char*>(&data_[start.Location() % BUFFER_SIZE]));
     auto block_size = sizeof(MemoryBlock<T>) + block->size * sizeof(T);
     auto end = start + block_size;
+    // @note: We store the start value in the allocated cursor before the
+    // following if statement so that the `IsBehindOrEqual` or `IsAheadOrEqual`
+    // methods of the cursor pool use the latest tested or set location in the
+    // allocated cursor.
+    cursor_h->store(start, std::memory_order_release);
     // Allocate chunk only if the end cursor is behind all the allocated write
     // cursors
     if (write_pool_.IsBehindOrEqual(end)) {
-      // @note: We store the start value in the allocated cursor before the
-      // following if statement so that the `IsBehindOrEqual` or
-      // `IsAheadOrEqual` methods of the cursor pool use the latest tested or
-      // set location in the allocated cursor.
-      cursor_h->store(start, std::memory_order_seq_cst);
       // Set read head to new value if its original value has not been already
       // changed by another reader.
       if (read_pool_.Head().compare_exchange_weak(start, end)) {
@@ -168,8 +167,7 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Data() const {
 // -------------------------
 
 }  // namespace circular_queue
-}  // namespace experimental
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__EXPERIMENTAL__CIRCULAR_QUEUE__ALLOCATOR_HPP */
+#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__ALLOCATOR_HPP */
