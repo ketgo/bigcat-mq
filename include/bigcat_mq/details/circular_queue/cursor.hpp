@@ -65,12 +65,6 @@ class Cursor {
   bool Overflow() const;
 
   /**
-   * @brief Flip the overflow sign of the cursor.
-   *
-   */
-  void FlipOverflow();
-
-  /**
    * @brief Get the location value stored in the cursor.
    *
    * @returns The location value.
@@ -104,6 +98,15 @@ class Cursor {
   Cursor operator+(const std::size_t value) const;
 
   /**
+   * @brief Subtract a value to the location stored in the cursor to get a new
+   * cursor.
+   *
+   * @param offset Value to subtract.
+   * @returns Cursor containing updated location value.
+   */
+  Cursor operator-(const std::size_t value) const;
+
+  /**
    * @brief Set the location value stored in the cursor.
    *
    * @param value The location value.
@@ -111,6 +114,12 @@ class Cursor {
   void SetLocation(const uint64_t value);
 
  private:
+  /**
+   * @brief Flip the overflow sign of the cursor.
+   *
+   */
+  void FlipOverflow();
+
   bool overflow_ : 1;
   uint64_t location_ : 63;
 };
@@ -137,12 +146,20 @@ bool Cursor::operator<(const Cursor &cursor) const {
 
 bool Cursor::operator<=(const Cursor &cursor) const {
   return overflow_ == cursor.overflow_ ? location_ <= cursor.location_
-                                       : location_ >= cursor.location_;
+                                       : location_ > cursor.location_;
 }
 
 Cursor Cursor::operator+(const std::size_t value) const {
   Cursor rvalue(overflow_, location_ + value);
   if (rvalue.location_ < location_) {
+    rvalue.FlipOverflow();
+  }
+  return rvalue;
+}
+
+Cursor Cursor::operator-(const std::size_t value) const {
+  Cursor rvalue(overflow_, location_ - value);
+  if (rvalue.location_ > location_) {
     rvalue.FlipOverflow();
   }
   return rvalue;
@@ -289,186 +306,6 @@ CursorHandle<CursorPool>::operator bool() const {
 template <class CursorPool>
 CursorHandle<CursorPool>::~CursorHandle() {
   Release();
-}
-
-// ============================================================================
-
-/**
- * @brief A lock-free and wait-free pool of cursors used by the circular queue
- * for read/write operations. The pool also contains the head cursor which
- * contains the read/write head location.
- *
- * @tparam POOL_SIZE Number of cursors in the pool.
- */
-template <std::size_t POOL_SIZE>
-class CursorPool {
-  friend class CursorHandle<CursorPool>;
-
- public:
-  /**
-   * @brief Thread safe fast pseudo random number generator.
-   *
-   */
-  static std::size_t Random();
-
-  /**
-   * @brief Construct a new CursorPool object.
-   *
-   */
-  CursorPool();
-
-  /**
-   * @brief Get the head cursor.
-   *
-   * @returns Reference to the head cursor.
-   */
-  std::atomic<Cursor> &Head();
-
-  // TODO: Move back to IsBehind from IsBehindOrEqual.
-
-  /**
-   * @brief Check if the given cursor is behind all the allocated cursors in the
-   * pool or equals the head cursor.
-   *
-   * @returns `true` if behind or equal else `false`.
-   */
-  bool IsBehindOrEqual(const Cursor &cursor) const;
-
-  /**
-   * @brief Check if the given cursor is ahead of all the allocated cursors in
-   * the pool or equals the head cursor.
-   *
-   * @returns `true` if ahead or equal else `false`.
-   */
-  bool IsAheadOrEqual(const Cursor &cursor) const;
-
-  /**
-   * @brief Allocate a cursor from available set of free cursors.
-   *
-   * The method attempts to allocate a free cursor by random selection. It
-   * performs `max_attempt` number of attempts. If no cursor is found then a
-   * null pointer is returned.
-   *
-   * @param max_attempt Maximum number of attempts to perform.
-   * @returns Pointer to the allocated cursor.
-   */
-  CursorHandle<CursorPool> Allocate(std::size_t max_attempt);
-
- private:
-  /**
-   * @brief Release an allocated cursor.
-   *
-   * @param cursor Pointer to the cursor.
-   */
-  void Release(std::atomic<Cursor> *cursor);
-
-  /**
-   * @brief Enumerated states of a cursor.
-   *
-   */
-  enum class CursorState {
-    FREE,       // Cursor free for use.
-    ALLOCATED,  // Cursor in use.
-  };
-  std::atomic<CursorState> cursor_state_[POOL_SIZE];
-  std::atomic<Cursor> cursor_[POOL_SIZE];
-  std::atomic<Cursor> head_;
-};
-
-// -----------------------------
-// CursorPool Implementation
-// -----------------------------
-
-template <std::size_t POOL_SIZE>
-void CursorPool<POOL_SIZE>::Release(std::atomic<Cursor> *cursor) {
-  assert(cursor != nullptr);
-  const std::size_t idx = cursor - cursor_;
-  cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
-}
-
-// ------- public --------------
-
-// static
-template <std::size_t POOL_SIZE>
-std::size_t CursorPool<POOL_SIZE>::Random() {
-  // Implementation of a Xorshoft generator with a period of 2^96-1.
-  // https://stackoverflow.com/questions/1640258/need-a-fast-random-generator-for-c
-  thread_local size_t x = 123456789, y = 362436069, z = 521288629;
-  x ^= x << 16;
-  x ^= x >> 5;
-  x ^= x << 1;
-  auto t = x;
-  x = y;
-  y = z;
-  z = t ^ x ^ y;
-  return z;
-}
-
-template <std::size_t POOL_SIZE>
-CursorPool<POOL_SIZE>::CursorPool() {
-  // Inital cursor value
-  Cursor cursor(false, 0);
-  head_.store(cursor, std::memory_order_seq_cst);
-  for (std::size_t idx = 0; idx < POOL_SIZE; ++idx) {
-    cursor_[idx].store(cursor, std::memory_order_seq_cst);
-    cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
-  }
-}
-
-template <std::size_t POOL_SIZE>
-std::atomic<Cursor> &CursorPool<POOL_SIZE>::Head() {
-  return head_;
-}
-
-template <std::size_t POOL_SIZE>
-bool CursorPool<POOL_SIZE>::IsBehindOrEqual(const Cursor &cursor) const {
-  auto head = head_.load(std::memory_order_acquire);
-  if (head < cursor) {
-    return false;
-  }
-  for (std::size_t idx = 0; idx < POOL_SIZE; ++idx) {
-    if (cursor_state_[idx].load(std::memory_order_acquire) ==
-        CursorState::ALLOCATED) {
-      auto _cursor = cursor_[idx].load(std::memory_order_acquire);
-      if (_cursor < cursor) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-template <std::size_t POOL_SIZE>
-bool CursorPool<POOL_SIZE>::IsAheadOrEqual(const Cursor &cursor) const {
-  auto head = head_.load(std::memory_order_acquire);
-  if (cursor < head) {
-    return false;
-  }
-  for (std::size_t idx = 0; idx < POOL_SIZE; ++idx) {
-    if (cursor_state_[idx].load(std::memory_order_acquire) ==
-        CursorState::ALLOCATED) {
-      auto _cursor = cursor_[idx].load(std::memory_order_acquire);
-      if (cursor < _cursor) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-template <std::size_t POOL_SIZE>
-CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
-    std::size_t max_attempt) {
-  while (max_attempt) {
-    const std::size_t idx = Random() % POOL_SIZE;
-    auto expected = CursorState::FREE;
-    if (cursor_state_[idx].compare_exchange_strong(
-            expected, CursorState::ALLOCATED, std::memory_order_acq_rel)) {
-      return {cursor_[idx], *this};
-    }
-    --max_attempt;
-  }
-  return {};
 }
 
 // ============================================================================

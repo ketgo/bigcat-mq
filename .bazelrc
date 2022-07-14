@@ -48,5 +48,8 @@ build:msan --copt -fno-omit-frame-pointer
 build:msan --linkopt -fsanitize=memory
 build:msan --cc_output_directory_tag=msan
 
+# Enable Tracing
+build:trace --copt -D__ENABLE_TRACE__
+
 # Dont cache test results
 test --cache_test_results=no

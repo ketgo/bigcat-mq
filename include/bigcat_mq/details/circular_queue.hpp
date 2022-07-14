@@ -20,14 +20,10 @@
 #include <bigcat_mq/details/span.hpp>
 #include <bigcat_mq/details/circular_queue/allocator.hpp>
 
-// BUG:
-// a. Release cursors for stale processes which have abruptly died. Note that if
-//    we reprocess the message block pointed by these cursors we implement the
-//    AtleastOnce delivery and if we ignore these messages we implement the
-//    AtmostOnce delivery.
-// b. When the read ans write heads are both at the same location and once
-//    thread publishes while another consumes at the same time then a data race
-//    can happen where partially written memory block is read by the consumer
+// TODO: Release cursors for stale processes which have abruptly died. Note that
+// if we reprocess the message block pointed by these cursors we implement the
+// AtleastOnce delivery and if we ignore these messages we implement the
+// AtmostOnce delivery.
 
 namespace bigcat {
 namespace details {

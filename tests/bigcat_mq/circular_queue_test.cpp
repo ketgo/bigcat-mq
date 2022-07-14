@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <unordered_set>
 
 #include <gtest/gtest.h>
@@ -38,9 +39,13 @@ class CircularQueueTestFixture : public ::testing::Test {
   // Publish data to ring buffer
   void Publish(const std::string& data,
                std::chrono::microseconds delay = std::chrono::microseconds{0}) {
-    do {
+    while (true) {
       std::this_thread::sleep_for(delay);
-    } while (queue_.Publish(data) != CircularQueueResult::SUCCESS);
+      if (queue_.Publish(data) == CircularQueueResult::SUCCESS) {
+        break;
+      }
+      std::this_thread::yield();
+    }
   }
 
   // Consume data from ring buffer
@@ -48,10 +53,13 @@ class CircularQueueTestFixture : public ::testing::Test {
                std::chrono::microseconds delay = std::chrono::microseconds{
                    0}) const {
     Queue::ReadSpan span;
-
-    do {
+    while (true) {
       std::this_thread::sleep_for(delay);
-    } while (queue_.Consume(span) != CircularQueueResult::SUCCESS);
+      if (queue_.Consume(span) == CircularQueueResult::SUCCESS) {
+        break;
+      }
+      std::this_thread::yield();
+    }
     data = std::string(span.Data(), span.Size());
   }
 };
@@ -74,26 +82,30 @@ TEST_F(CircularQueueTestFixture, TestPublishConsumeSingleThread) {
   }
 }
 
-TEST_F(CircularQueueTestFixture,
-       TestPublishMultipleThreadsConsumeSingleThread) {
-  constexpr auto kThreadCount = 10;
+TEST_F(CircularQueueTestFixture, TestPublishConsumeMultipleThreadsSerial) {
+  constexpr auto kProducers = 10;
+  constexpr auto kConsumers = 10;
 
-  std::array<std::string, kThreadCount> write_data;
-  std::array<std::string, kThreadCount> read_data;
-  for (size_t i = 0; i < kThreadCount; ++i) {
+  std::array<std::string, kProducers> write_data;
+  std::array<std::string, kConsumers> read_data;
+  for (size_t i = 0; i < kProducers; ++i) {
     write_data[i] = "testing_" + std::to_string(i);
   }
   utils::RandomDelayGenerator<> rand(1, 5);
 
   {
-    utils::Threads producers(kThreadCount);
-    for (size_t i = 0; i < kThreadCount; ++i) {
+    utils::Threads producers(kProducers);
+    for (size_t i = 0; i < kProducers; ++i) {
       producers[i] = std::thread(&CircularQueueTestFixture::Publish, this,
                                  std::ref(write_data[i]), rand());
     }
+  }
 
-    for (size_t i = 0; i < kThreadCount; ++i) {
-      Consume(read_data[i]);
+  {
+    utils::Threads consumers(kConsumers);
+    for (size_t i = 0; i < kConsumers; ++i) {
+      consumers[i] = std::thread(&CircularQueueTestFixture::Consume, this,
+                                 std::ref(read_data[i]), rand());
     }
   }
 
@@ -103,7 +115,7 @@ TEST_F(CircularQueueTestFixture,
   }
 }
 
-TEST_F(CircularQueueTestFixture, TestPublishConsumeMultipleThreads) {
+TEST_F(CircularQueueTestFixture, TestPublishConsumeMultipleThreadsConcurrent) {
   constexpr auto kProducers = 10;
   constexpr auto kConsumers = 10;
 

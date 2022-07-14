@@ -19,7 +19,7 @@
 #include <array>
 #include <unordered_set>
 
-#include <bigcat_mq/details/circular_queue/cursor.hpp>
+#include <bigcat_mq/details/circular_queue/cursor_pool.hpp>
 
 #include "utils/random.hpp"
 #include "utils/threads.hpp"
@@ -117,17 +117,12 @@ TEST(CircularQueueCursorPoolTestFixture, IsBehindOrEqualSingleThread) {
       handles[i]->store(cursor, std::memory_order_seq_cst);
     }
   }
-  auto cursor = pool.Head().load(std::memory_order_seq_cst);
-  max += 10;
-  cursor.SetLocation(max);
-  pool.Head().store(cursor, std::memory_order_seq_cst);
 
-  ASSERT_TRUE(pool.IsBehindOrEqual({false, min / 2}));
-  ASSERT_TRUE(pool.IsBehindOrEqual({false, min}));  // equality check
-  ASSERT_FALSE(pool.IsBehindOrEqual({false, (min + max) / 2}));
-  ASSERT_FALSE(pool.IsBehindOrEqual({false, 2 * max}));
-  ASSERT_FALSE(pool.IsBehindOrEqual({true, min / 2}));
-  ASSERT_TRUE(pool.IsBehindOrEqual({true, 2 * max}));
+  ASSERT_TRUE(pool.IsBehind({false, min / 2}));
+  ASSERT_FALSE(pool.IsBehind({false, (min + max) / 2}));
+  ASSERT_FALSE(pool.IsBehind({false, 2 * max}));
+  ASSERT_FALSE(pool.IsBehind({true, min / 2}));
+  ASSERT_TRUE(pool.IsBehind({true, 2 * max}));
 }
 
 TEST(CircularQueueCursorPoolTestFixture, IsAheadOrEqualSingleThread) {
@@ -148,15 +143,10 @@ TEST(CircularQueueCursorPoolTestFixture, IsAheadOrEqualSingleThread) {
       handles[i]->store(cursor, std::memory_order_seq_cst);
     }
   }
-  auto cursor = pool.Head().load(std::memory_order_seq_cst);
-  max += 10;
-  cursor.SetLocation(max);
-  pool.Head().store(cursor, std::memory_order_seq_cst);
 
-  ASSERT_FALSE(pool.IsAheadOrEqual({false, min / 2}));
-  ASSERT_FALSE(pool.IsAheadOrEqual({false, (min + max) / 2}));
-  ASSERT_TRUE(pool.IsAheadOrEqual({false, max}));  // equality check
-  ASSERT_TRUE(pool.IsAheadOrEqual({false, 2 * max}));
-  ASSERT_TRUE(pool.IsAheadOrEqual({true, min / 2}));
-  ASSERT_FALSE(pool.IsAheadOrEqual({true, 2 * max}));
+  ASSERT_FALSE(pool.IsAhead({false, min / 2}));
+  ASSERT_FALSE(pool.IsAhead({false, (min + max) / 2}));
+  ASSERT_TRUE(pool.IsAhead({false, 2 * max}));
+  ASSERT_TRUE(pool.IsAhead({true, min / 2}));
+  ASSERT_FALSE(pool.IsAhead({true, 2 * max}));
 }

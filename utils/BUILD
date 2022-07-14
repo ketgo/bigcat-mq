@@ -32,9 +32,9 @@ cc_library(
 )
 
 cc_library(
-    name = "debug",
+    name = "dprint",
     hdrs = [
-        "debug.hpp",
+        "dprint.hpp",
     ],
     deps = [],
 )

@@ -17,7 +17,7 @@ cc_test(
     srcs = [
         "circular_queue_test.cpp",
     ],
-    args = ["--gtest_repeat=10"],
+    args = ["--gtest_repeat=100"],
     deps = [
         "//:bigcat_mq",
         "//utils:chrono",
