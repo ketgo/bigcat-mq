@@ -13,9 +13,20 @@
 # limitations under the License.
 
 cc_test(
-    name = "circular_queue_test",
+    name = "random_test",
     srcs = [
-        "circular_queue_test.cpp",
+        "random_test.cpp",
+    ],
+    deps = [
+        "//:bigcat_mq",
+        "@gtest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "circular_queue_a_test",
+    srcs = [
+        "circular_queue_a_test.cpp",
     ],
     args = ["--gtest_repeat=100"],
     deps = [

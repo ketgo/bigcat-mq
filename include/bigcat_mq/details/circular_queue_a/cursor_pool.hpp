@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__CURSOR_POOL_HPP
-#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__CURSOR_POOL_HPP
+#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A__CURSOR_POOL_HPP
+#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A__CURSOR_POOL_HPP
 
-#include <bigcat_mq/details/circular_queue/cursor.hpp>
+#include <bigcat_mq/details/random.hpp>
+#include <bigcat_mq/details/circular_queue_a/cursor.hpp>
 
 namespace bigcat {
 namespace details {
-namespace circular_queue {
+namespace circular_queue_a {
 
 // ============================================================================
 
@@ -36,13 +37,17 @@ template <std::size_t POOL_SIZE>
 class CursorPool {
   friend class CursorHandle<CursorPool>;
 
- public:
   /**
-   * @brief Thread safe fast pseudo random number generator.
+   * @brief Enumerated states of a cursor.
    *
    */
-  static std::size_t Random();
+  enum class CursorState {
+    FREE,       // Cursor free for use.
+    ALLOCATED,  // Cursor in use.
+  };
+  using AtomicCursorState = std::atomic<CursorState>;
 
+ public:
   /**
    * @brief Construct a new CursorPool object.
    *
@@ -83,18 +88,10 @@ class CursorPool {
    *
    * @param cursor Pointer to the cursor.
    */
-  void Release(std::atomic<Cursor> *cursor);
+  void Release(AtomicCursor *cursor);
 
-  /**
-   * @brief Enumerated states of a cursor.
-   *
-   */
-  enum class CursorState {
-    FREE,       // Cursor free for use.
-    ALLOCATED,  // Cursor in use.
-  };
-  std::atomic<CursorState> cursor_state_[POOL_SIZE];
-  std::atomic<Cursor> cursor_[POOL_SIZE];
+  AtomicCursorState cursor_state_[POOL_SIZE];
+  AtomicCursor cursor_[POOL_SIZE];
 };
 
 // -----------------------------
@@ -102,29 +99,13 @@ class CursorPool {
 // -----------------------------
 
 template <std::size_t POOL_SIZE>
-void CursorPool<POOL_SIZE>::Release(std::atomic<Cursor> *cursor) {
+void CursorPool<POOL_SIZE>::Release(AtomicCursor *cursor) {
   assert(cursor != nullptr);
   const std::size_t idx = cursor - cursor_;
   cursor_state_[idx].store(CursorState::FREE, std::memory_order_seq_cst);
 }
 
 // ------- public --------------
-
-// static
-template <std::size_t POOL_SIZE>
-std::size_t CursorPool<POOL_SIZE>::Random() {
-  // Implementation of a Xorshoft generator with a period of 2^96-1.
-  // https://stackoverflow.com/questions/1640258/need-a-fast-random-generator-for-c
-  thread_local size_t x = 123456789, y = 362436069, z = 521288629;
-  x ^= x << 16;
-  x ^= x >> 5;
-  x ^= x << 1;
-  auto t = x;
-  x = y;
-  y = z;
-  z = t ^ x ^ y;
-  return z;
-}
 
 template <std::size_t POOL_SIZE>
 CursorPool<POOL_SIZE>::CursorPool() {
@@ -174,6 +155,7 @@ CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
                                                    CursorState::ALLOCATED)) {
       return {cursor_[idx], *this};
     }
+    // TODO: Check if the cursor is stale
     --max_attempt;
   }
   return {};
@@ -181,8 +163,8 @@ CursorHandle<CursorPool<POOL_SIZE>> CursorPool<POOL_SIZE>::Allocate(
 
 // ============================================================================
 
-}  // namespace circular_queue
+}  // namespace circular_queue_a
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__CURSOR_POOL_HPP */
+#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A__CURSOR_POOL_HPP */

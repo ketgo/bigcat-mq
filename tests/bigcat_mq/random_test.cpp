@@ -16,25 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include <bigcat_mq/details/circular_queue/cursor.hpp>
+#include <bigcat_mq/details/random.hpp>
 
 using namespace bigcat::details;
 
-namespace {
-
-using Cursor = circular_queue::Cursor;
-using AtomicCursor = std::atomic<circular_queue::Cursor>;
-
-}  // namespace
-
-TEST(CircularQueueCursorTestFixture, AddOperation) {
-  Cursor cursor(false, std::numeric_limits<std::size_t>::max());
-
-  auto new_cursor = cursor + 5;
-  ASSERT_TRUE(new_cursor.Overflow());
-  ASSERT_EQ(new_cursor.Location(), 4);
-}
-
-TEST(CircularQueueCursorTestFixture, AtomicCursorIsLockFree) {
-  ASSERT_TRUE(AtomicCursor().is_lock_free());
+TEST(RandomNumberGeneratorTestFixture, TestRandom) {
+  ASSERT_NE(Random(), Random());
 }

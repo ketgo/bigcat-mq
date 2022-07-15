@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__ALLOCATOR_HPP
-#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__ALLOCATOR_HPP
+#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A__ALLOCATOR_HPP
+#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A__ALLOCATOR_HPP
 
-#include <bigcat_mq/details/circular_queue/block.hpp>
-#include <bigcat_mq/details/circular_queue/cursor_pool.hpp>
+#include <bigcat_mq/details/circular_queue_a/block.hpp>
+#include <bigcat_mq/details/circular_queue_a/cursor_pool.hpp>
 
 namespace bigcat {
 namespace details {
-namespace circular_queue {
+namespace circular_queue_a {
 
 /**
  * @brief Allocator to allocate read and write memory blocks in a circular
@@ -71,9 +71,9 @@ class Allocator {
  private:
   unsigned char data_[BUFFER_SIZE];              // data buffer
   CursorPool<MAX_PRODUCERS> write_pool_;         // write cursor pool
-  std::atomic<Cursor> write_head_;               // write head cursor
+  AtomicCursor write_head_;                      // write head cursor
   mutable CursorPool<MAX_CONSUMERS> read_pool_;  // read cursor pool
-  mutable std::atomic<Cursor> read_head_;        // read head cursor
+  mutable AtomicCursor read_head_;               // read head cursor
 };
 
 // -------------------------
@@ -183,8 +183,8 @@ Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Data() const {
 
 // -------------------------
 
-}  // namespace circular_queue
+}  // namespace circular_queue_a
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE__ALLOCATOR_HPP */
+#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A__ALLOCATOR_HPP */

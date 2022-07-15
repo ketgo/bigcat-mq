@@ -19,7 +19,7 @@
 
 #include <gtest/gtest.h>
 
-#include <bigcat_mq/details/circular_queue.hpp>
+#include <bigcat_mq/details/circular_queue_a.hpp>
 
 #include "utils/chrono.hpp"
 #include "utils/threads.hpp"
@@ -32,7 +32,8 @@ class CircularQueueTestFixture : public ::testing::Test {
   static constexpr auto kMaxProducers = 100;
   static constexpr auto kMaxConsumers = 100;
 
-  using Queue = CircularQueue<char, kBufferSize, kMaxProducers, kMaxConsumers>;
+  using Queue =
+      CircularQueueTypeA<char, kBufferSize, kMaxProducers, kMaxConsumers>;
   Queue queue_;
 
  public:
@@ -41,7 +42,7 @@ class CircularQueueTestFixture : public ::testing::Test {
                std::chrono::microseconds delay = std::chrono::microseconds{0}) {
     while (true) {
       std::this_thread::sleep_for(delay);
-      if (queue_.Publish(data) == CircularQueueResult::SUCCESS) {
+      if (queue_.Publish(data) == Queue::Result::SUCCESS) {
         break;
       }
       std::this_thread::yield();
@@ -55,7 +56,7 @@ class CircularQueueTestFixture : public ::testing::Test {
     Queue::ReadSpan span;
     while (true) {
       std::this_thread::sleep_for(delay);
-      if (queue_.Consume(span) == CircularQueueResult::SUCCESS) {
+      if (queue_.Consume(span) == Queue::Result::SUCCESS) {
         break;
       }
       std::this_thread::yield();
@@ -70,13 +71,13 @@ TEST_F(CircularQueueTestFixture, TestPublishConsumeSingleThread) {
   std::unordered_set<std::string> write_data;
   for (size_t i = 0; i < kMessageCount; ++i) {
     std::string data = "testing_" + std::to_string(i);
-    ASSERT_EQ(queue_.Publish(data), CircularQueueResult::SUCCESS);
+    ASSERT_EQ(queue_.Publish(data), Queue::Result::SUCCESS);
     write_data.insert(data);
   }
 
   for (size_t i = 0; i < kMessageCount; ++i) {
     Queue::ReadSpan span;
-    ASSERT_EQ(queue_.Consume(span), CircularQueueResult::SUCCESS);
+    ASSERT_EQ(queue_.Consume(span), Queue::Result::SUCCESS);
     std::string data(span.Data(), span.Size());
     ASSERT_TRUE(write_data.find(data) != write_data.end());
   }

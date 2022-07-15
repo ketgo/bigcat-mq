@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_HPP
-#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_HPP
+#ifndef BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A_HPP
+#define BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A_HPP
 
 #include <bigcat_mq/details/span.hpp>
-#include <bigcat_mq/details/circular_queue/allocator.hpp>
+#include <bigcat_mq/details/circular_queue_a/allocator.hpp>
 
 // TODO: Release cursors for stale processes which have abruptly died. Note that
 // if we reprocess the message block pointed by these cursors we implement the
@@ -29,18 +29,8 @@ namespace bigcat {
 namespace details {
 
 /**
- * @brief Enumerated set of results returned by the RingBuffer.
- *
- */
-enum class CircularQueueResult {
-  SUCCESS = 0,             // Successful completion of operation
-  ERROR_BUFFER_FULL = 1,   // Queue full error
-  ERROR_BUFFER_EMPTY = 2,  // Queue empty error
-};
-
-/**
- * @brief The class `CircularQueue` is a lock-free and wait-free circular queue
- * supporting multiple concurrent consumers and producers.
+ * @brief The class `CircularQueueTypeATypeA` is a lock-free and wait-free
+ * circular queue supporting multiple concurrent consumers and producers.
  *
  * The circular queue is designed to be lock-free and wait-free supporting
  * multiple consumers and producers. It exposes two operations, `Publish` for
@@ -116,14 +106,24 @@ enum class CircularQueueResult {
  */
 template <class T, std::size_t BUFFER_SIZE, std::size_t MAX_PRODUCERS,
           std::size_t MAX_CONSUMERS>
-class CircularQueue {
+class CircularQueueTypeA {
  public:
+  /**
+   * @brief Enumerated set of results.
+   *
+   */
+  enum class Result {
+    SUCCESS = 0,             // Successful completion of operation
+    ERROR_BUFFER_FULL = 1,   // Queue full error
+    ERROR_BUFFER_EMPTY = 2,  // Queue empty error
+  };
+
   /**
    * @brief Span encapsulating memory block in the circular queue for reading.
    *
    */
-  using ReadSpan = circular_queue::MemoryBlockHandle<
-      const T, circular_queue::CursorPool<MAX_CONSUMERS>>;
+  using ReadSpan = circular_queue_a::MemoryBlockHandle<
+      const T, circular_queue_a::CursorPool<MAX_CONSUMERS>>;
 
   /**
    * @brief Span encapsulating memory block to write in the circular queue.
@@ -148,8 +148,8 @@ class CircularQueue {
    * @param max_attempt Maximum number of attempts to perform.
    * @returns Result of the operation.
    */
-  CircularQueueResult Publish(const WriteSpan &span,
-                              size_t max_attempt = defaultMaxAttempt());
+  Result Publish(const WriteSpan &span,
+                 size_t max_attempt = defaultMaxAttempt());
 
   /**
    * @brief Consume from ring buffer.
@@ -161,8 +161,8 @@ class CircularQueue {
    * @param max_attempt Maximum number of attempts to perform.
    * @returns Result of the operation.
    */
-  CircularQueueResult Consume(ReadSpan &span,
-                              size_t max_attempt = defaultMaxAttempt()) const;
+  Result Consume(ReadSpan &span,
+                 size_t max_attempt = defaultMaxAttempt()) const;
 
   /**
    * @brief Get the raw data in the circular queue.
@@ -171,19 +171,20 @@ class CircularQueue {
   const unsigned char *Data() const;
 
  private:
-  circular_queue::Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>
+  circular_queue_a::Allocator<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>
       allocator_;
 };
 
 // ----------------------------
-// CircularQueue Implementation
+// CircularQueueTypeA Implementation
 // ----------------------------
 
 template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
           size_t MAX_CONSUMERS>
-CircularQueueResult CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS,
-                                  MAX_CONSUMERS>::Publish(const WriteSpan &span,
-                                                          size_t max_attempt) {
+typename CircularQueueTypeA<T, BUFFER_SIZE, MAX_PRODUCERS,
+                            MAX_CONSUMERS>::Result
+CircularQueueTypeA<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Publish(
+    const WriteSpan &span, size_t max_attempt) {
   // Attempt writing of data
   while (max_attempt) {
     // Allocate a write block on the buffer
@@ -191,18 +192,19 @@ CircularQueueResult CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS,
     if (handle) {
       // Write data
       memcpy(handle.Data(), span.Data(), span.Size() * sizeof(T));
-      return CircularQueueResult::SUCCESS;
+      return Result::SUCCESS;
     }
     // Could not allocate chunk so attempt again
     --max_attempt;
   }
-  return CircularQueueResult::ERROR_BUFFER_FULL;
+  return Result::ERROR_BUFFER_FULL;
 }
 
 template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
           size_t MAX_CONSUMERS>
-CircularQueueResult
-CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Consume(
+typename CircularQueueTypeA<T, BUFFER_SIZE, MAX_PRODUCERS,
+                            MAX_CONSUMERS>::Result
+CircularQueueTypeA<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Consume(
     ReadSpan &span, size_t max_attempt) const {
   // Attempt reading of data
   while (max_attempt) {
@@ -210,18 +212,18 @@ CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Consume(
     auto handle = allocator_.Allocate(max_attempt);
     if (handle) {
       span = std::move(handle);
-      return CircularQueueResult::SUCCESS;
+      return Result::SUCCESS;
     }
     // Could not allocate chunk so attempt again
     --max_attempt;
   }
-  return CircularQueueResult::ERROR_BUFFER_EMPTY;
+  return Result::ERROR_BUFFER_EMPTY;
 }
 
 template <class T, size_t BUFFER_SIZE, size_t MAX_PRODUCERS,
           size_t MAX_CONSUMERS>
 const unsigned char *
-CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Data() const {
+CircularQueueTypeA<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Data() const {
   return allocator_.Data();
 }
 
@@ -230,4 +232,4 @@ CircularQueue<T, BUFFER_SIZE, MAX_PRODUCERS, MAX_CONSUMERS>::Data() const {
 }  // namespace details
 }  // namespace bigcat
 
-#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_HPP */
+#endif /* BIGCAT_MQ__DETAILS__CIRCULAR_QUEUE_A_HPP */
