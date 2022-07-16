@@ -36,3 +36,15 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "shared_object_test",
+    srcs = [
+        "shared_object_test.cpp",
+    ],
+    deps = [
+        "//:bigcat_mq",
+        "@gtest//:gtest_main",
+    ],
+)
+
