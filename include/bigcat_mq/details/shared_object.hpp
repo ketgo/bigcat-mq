@@ -28,33 +28,30 @@
 
 namespace bigcat {
 namespace details {
+namespace shared_object {
 
-template <class T>
-class SharedObject {
+/**
+ * @brief Get or create a shared object of type T with given globally unique
+ * name and CTOR parameters.
+ *
+ * The method gets an instance of a shared object of type T. If such an object
+ * does not exist then a new object is created using the passed constructor
+ * arguments.
+ *
+ * @tparam T The type of shared object.
+ * @tparam Args Constructor argument types.
+ * @param name Constant reference to the system unique name of the shared
+ * object.
+ * @param args Rvalue reference to the constructor arguments of the shared
+ * object. Note that these value will not get used if the object already exists.
+ * @returns Pointer to the shared object.
+ */
+template <class T, class... Args>
+T* GetOrCreate(const std::string& name, Args&&... args) {
   static_assert(std::is_trivial<T>::value,
                 "The data type used does not have a trivial memory layout.");
 
- public:
-  template <class... Args>
-  static T* Instance(const std::string& name, Args&&... args);
-  static bool Remove(const std::string& name);
-
- private:
-  template <class... Args>
-  SharedObject(const std::string& name, Args&&... args);
-
-  const std::string name_;
-  T* object_;
-};
-
-// --------------------------------
-// SharedObject Implementation
-// --------------------------------
-
-template <class T>
-template <class... Args>
-SharedObject<T>::SharedObject(const std::string& name, Args&&... args)
-    : name_(name), object_(nullptr) {
+  bool new_obj = false;
   auto fd =
       shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
   if (fd == -1 && errno != EEXIST) {
@@ -62,6 +59,7 @@ SharedObject<T>::SharedObject(const std::string& name, Args&&... args)
   } else if (fd == -1 && errno == EEXIST) {
     fd = shm_open(name.c_str(), O_RDWR, S_IRUSR | S_IWUSR);
   } else {
+    new_obj = true;
     if (ftruncate(fd, sizeof(T)) == -1) {
       throw std::system_error(errno, std::generic_category(), "ftruncate");
     }
@@ -72,28 +70,24 @@ SharedObject<T>::SharedObject(const std::string& name, Args&&... args)
     throw std::system_error(errno, std::generic_category(), "mmap");
   }
   close(fd);
-
-  object_ = reinterpret_cast<T*>(addr);
+  return new_obj ? new (addr) T(std::forward<Args>(args)...)
+                 : reinterpret_cast<T*>(addr);
 }
 
-// ----------- public -------------
-
-// static
-template <class T>
-template <class... Args>
-T* SharedObject<T>::Instance(const std::string& name, Args&&... args) {
-  static SharedObject instance(name, std::forward<Args>(args)...);
-  return instance.object_;
-}
-
-// static
-template <class T>
-bool SharedObject<T>::Remove(const std::string& name) {
+/**
+ * @brief Mark the shared object with given system unique name for removal. The
+ * object will get removed by the OS once no more references created by other
+ * processes exist.
+ *
+ * @param name Constant reference to the system unique name of the shared
+ * object.
+ * @returns `true` on success else `false`.
+ */
+inline bool Remove(const std::string& name) {
   return shm_unlink(name.c_str()) < 0 ? false : true;
 }
 
-// --------------------------------
-
+}  // namespace shared_object
 }  // namespace details
 }  // namespace bigcat
 

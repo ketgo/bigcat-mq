@@ -16,15 +16,46 @@
 
 #include <bigcat_mq/details/shared_object.hpp>
 
+#include "utils/threads.hpp"
+#include "utils/chrono.hpp"
+
 using namespace bigcat::details;
 
 namespace {
-constexpr auto kSharedObjectName = "/test_char";
+constexpr auto kTestThreadCount = 10;
+constexpr auto kTestCycleCount = 10;
+constexpr auto kSharedObjectName = "/test_shared_object";
 
-using SharedChar = SharedObject<char>;
+struct TestData {
+  TestData() = default;
+  TestData(const int value_) : value(value_) {}
+
+  int value;
+};
+
+// Update value in the mock data type
+__attribute__((no_sanitize("thread"))) void Update(TestData* obj) {
+  utils::RandomDelayGenerator<> delay(10, 100);
+  for (std::size_t i = 0; i < kTestCycleCount; ++i) {
+    auto value = obj->value;
+    std::this_thread::sleep_for(delay());
+    obj->value = value + 1;
+  }
+}
+
 }  // namespace
 
-TEST(SharedObjectTestFixture, TestSingleton) {
-  auto obj = SharedChar::Instance(kSharedObjectName);
-  SharedChar::Remove(kSharedObjectName);
+TEST(SharedObjectTestFixture, TestSingleThread) {
+  auto obj = shared_object::GetOrCreate<TestData>(kSharedObjectName, 10);
+  ASSERT_EQ(obj->value, 10);
+  shared_object::Remove(kSharedObjectName);
+}
+
+TEST(SharedObjectTestFixture, TestMultipleThreads) {
+  auto obj = shared_object::GetOrCreate<TestData>(kSharedObjectName, 0);
+  utils::RunThreads(kTestThreadCount, &Update, obj);
+  // NOTE: Due to the race condition the counter value should be less than max
+  // possible value.
+  ASSERT_LT(obj->value, kTestCycleCount * kTestThreadCount);
+  shared_object::Remove(kSharedObjectName);
 }

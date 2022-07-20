@@ -44,6 +44,8 @@ cc_test(
     ],
     deps = [
         "//:bigcat_mq",
+        "//utils:chrono",
+        "//utils:threads",
         "@gtest//:gtest_main",
     ],
 )
